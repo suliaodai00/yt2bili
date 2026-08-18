@@ -467,18 +467,67 @@ function clearAllFiles() {
   });
 }
 
+/* ================= Telegram 机器人 ================= */
+function saveTgToken() {
+  const input = document.getElementById('tgTokenInput');
+  const btn = document.getElementById('tgSaveBtn');
+  const status = document.getElementById('tgStatus');
+  const token = input.value.trim();
+  if (!token) { status.textContent = '请输入 Token'; status.style.color = 'var(--err)'; return; }
+  btn.disabled = true; btn.textContent = '保存中...';
+  fetch('/api/tg-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token })
+  }).then(r => r.json()).then(d => {
+    btn.disabled = false; btn.textContent = '保存 Token';
+    if (d.ok) {
+      status.textContent = '✅ 已保存，机器人已重启';
+      status.style.color = 'var(--ok)';
+      setTimeout(() => { status.textContent = ''; }, 3000);
+      renderTgStatus(d);
+    } else {
+      status.textContent = d.error || '保存失败';
+      status.style.color = 'var(--err)';
+    }
+  }).catch(() => {
+    btn.disabled = false; btn.textContent = '保存 Token';
+    status.textContent = '请求失败'; status.style.color = 'var(--err)';
+  });
+}
+
+function renderTgStatus(d) {
+  const el = document.getElementById('tgBotStatus');
+  if (!el) return;
+  const input = document.getElementById('tgTokenInput');
+  if (d && d.token_set) {
+    if (input && !input.value) input.value = d.token_preview || '';
+  }
+  if (d && d.running) {
+    el.className = 'proxy-status ok';
+    el.textContent = '🤖 ' + (d.bot_name || 'Bot') + ' 在线 · 已记录 ' + (d.users || 0) + ' 个用户';
+  } else if (d && d.token_set) {
+    el.className = 'proxy-status';
+    el.textContent = 'Token 已配置，启动中...';
+  } else {
+    el.className = 'proxy-status warn';
+    el.textContent = '未配置 Bot Token';
+  }
+}
 /* ================= 轮询 ================= */
 function refreshAll() {
   Promise.all([
     fetch('/api/stats').then(r => r.json()),
     fetch('/api/system').then(r => r.json()),
     fetch('/api/cookies').then(r => r.json()),
+    fetch('/api/tg-token').then(r => r.json()),
     fetch('/tasks').then(r => r.json())
-  ]).then(([stats, sys, cookies, tasks]) => {
+  ]).then(([stats, sys, cookies, tg, tasks]) => {
     renderStats(stats);
     renderSystem(sys);
     renderOllama(sys.ollama);
     renderCookies(cookies);
+    renderTgStatus(tg);
     allTasks = tasks;
     renderTasks();
   }).catch(() => {});

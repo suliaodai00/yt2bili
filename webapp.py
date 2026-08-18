@@ -4,6 +4,7 @@
 含任务持久化、统计、服务器资源监控、失败重试。
 """
 import os, sys, json, time, subprocess, threading, re, shutil, urllib.request, urllib.parse, io, base64, http.cookiejar, hashlib
+import telegram_bot
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, make_response
 
@@ -51,6 +52,38 @@ def load_tasks():
             t['status'] = 'error'
             t['step'] = '服务重启中断'
             t['logs'] = t.get('logs', []) + ["[--:--:--] ⚠️ 服务重启，任务中断"]
+
+
+def _stop_ollama_if_idle():
+    """当无活跃任务时停止 Ollama 节省资源"""
+    try:
+        import subprocess
+        # 检查是否有 running/queued 任务
+        active = [t for t in tasks.values() if t.get('status') in ('running', 'queued')]
+        if active:
+            return
+        # 检查 Ollama 是否在运行且无活跃请求
+        out = subprocess.run(['pgrep', '-f', 'llama-server'], capture_output=True, text=True, timeout=5)
+        if out.returncode == 0:
+            subprocess.run(['systemctl', 'stop', 'ollama'], timeout=30)
+            print(f"[Ollama] 无活跃任务，已停止 Ollama 节省资源")
+    except Exception as e:
+        print(f"[Ollama] 停止失败: {e}")
+
+
+def _start_ollama_if_needed():
+    """有任务时启动 Ollama"""
+    try:
+        import subprocess
+        out = subprocess.run(['systemctl', 'is-active', 'ollama'], capture_output=True, text=True, timeout=5)
+        if out.returncode != 0:
+            subprocess.run(['systemctl', 'start', 'ollama'], timeout=30)
+            print(f"[Ollama] 新任务，已启动 Ollama")
+            # 等待模型加载
+            import time
+            time.sleep(3)
+    except Exception as e:
+        print(f"[Ollama] 启动失败: {e}")
 
 
 def save_tasks():
@@ -484,6 +517,16 @@ def run_task(task_id, url):
         task['progress'] = 100
         task['status'] = 'done'
         task['step'] = '✅ 全部完成'
+        try:
+            title_short = task.get('title', '')[:40]
+            dur = round(time.time() - started, 1)
+            _t_msg = '\U00002705 *\U00004EFB\U000052A1\U00005B8C\U00006210*\n'
+            _t_msg += '\U0001F3AC ' + title_short + '\n'
+            _t_msg += '\U000023F1 ' + str(dur) + 's\n'
+            _t_msg += '\U0001F4BB ' + url
+            telegram_bot.send_notification(_t_msg)
+        except Exception:
+            pass
 
     except subprocess.TimeoutExpired:
         task['status'] = 'error'
@@ -497,6 +540,15 @@ def run_task(task_id, url):
             log("🔑 当前服务器 IP 被 YouTube 风控，需要有效的 YouTube cookies")
             log("💡 请用浏览器扩展（如 Get cookies.txt）导出已登录 YouTube 的 cookies 并上传")
         log(f"❌ 错误: {msg}")
+        try:
+            title_short = task.get('title', '')[:40]
+            _t_msg = '\U0000274C *\U00004EFB\U000052A1\U00005931\U00008D25*\n'
+            _t_msg += '\U0001F3AC ' + title_short + '\n'
+            _t_msg += '\U0000274C ' + str(msg)[:100] + '\n'
+            _t_msg += '\U0001F4BB ' + url
+            telegram_bot.send_notification(_t_msg)
+        except Exception:
+            pass
         with lock:
             if _active > 0:
                 _active -= 1
@@ -511,7 +563,7 @@ def run_task(task_id, url):
             if k not in trim and tasks[k].get('status') in ('done', 'error'):
                 del tasks[k]
         save_tasks()
-
+    _stop_ollama_if_idle()
 
 # ============================================================
 # 系统资源监控
@@ -627,6 +679,26 @@ def index():
     return render_template('index.html')
 
 
+def start_new_task(url):
+    """供 bot 调用的任务创建函数，返回 task_id"""
+    if 'youtube.com/watch' not in url and 'youtu.be/' not in url:
+        return None
+    task_id = f"t{int(time.time() * 1000)}"
+    with lock:
+        tasks[task_id] = {
+            'id': task_id, 'status': 'queued', 'progress': 0,
+            'step': '排队中...', 'title': '处理中...',
+            'video_id': '', 'video_file': '', 'logs': [], 'url': url,
+            'created_at': time.time(),
+            'duration': None, 'subtitle_count': 0,
+        }
+        save_tasks()
+    _start_ollama_if_needed()
+    t = threading.Thread(target=run_task, args=(task_id, url), daemon=True)
+    t.start()
+    return task_id
+
+
 @app.route('/start', methods=['POST'])
 def start_task():
     data = request.get_json() or {}
@@ -646,6 +718,7 @@ def start_task():
             'duration': None, 'subtitle_count': 0,
         }
         save_tasks()
+    _start_ollama_if_needed()
     t = threading.Thread(target=run_task, args=(task_id, url), daemon=True)
     t.start()
     return jsonify({'task_id': task_id})
@@ -1090,8 +1163,90 @@ def api_clear_all():
     })
 
 
+@app.route('/api/tg-token', methods=['GET', 'POST'])
+def api_tg_token():
+    """Telegram Bot Token 配置"""
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        token = data.get('token', '').strip()
+        if not token:
+            return jsonify({'error': 'Token 不能为空'}), 400
+        if token == 'clear':
+            try:
+                if os.path.exists(CONFIG):
+                    with open(CONFIG, encoding='utf-8') as f:
+                        lines = f.readlines()
+                    lines = [l for l in lines if not l.startswith('telegram_bot_token:')]
+                    with open(CONFIG, 'w', encoding='utf-8') as f:
+                        f.writelines(lines)
+            except Exception:
+                pass
+            return jsonify({'ok': True, 'token_set': False, 'running': False})
+        # 写入 token
+        try:
+            with open(CONFIG, encoding='utf-8') as f:
+                content_cfg = f.read()
+            if 'telegram_bot_token:' in content_cfg:
+                lines = content_cfg.split('\n')
+                for i, line in enumerate(lines):
+                    if line.startswith('telegram_bot_token:'):
+                        lines[i] = f'telegram_bot_token: {token}'
+                        break
+                content_cfg = '\n'.join(lines)
+            else:
+                content_cfg += f'\ntelegram_bot_token: {token}\n'
+            with open(CONFIG, 'w', encoding='utf-8') as f:
+                f.write(content_cfg)
+        except Exception as e:
+            return jsonify({'error': f'\u5199\u5165\u5931\u8d25: {e}'}), 500
+        # 重启 bot 进程
+        try:
+            import signal, subprocess
+            out = subprocess.check_output(['pgrep', '-f', 'telegram_bot_runner']).decode().strip()
+            for pid in out.split('\n'):
+                if pid:
+                    os.kill(int(pid), signal.SIGTERM)
+        except Exception:
+            pass
+        # 重新启动 bot
+        try:
+            telegram_bot.run_bot()
+        except Exception:
+            pass
+        return jsonify({'ok': True, 'token_set': True, 'running': True, 'message': 'Token \u5df2\u4fdd\u5b58\uff0cBot \u5df2\u91cd\u542f'})
+    else:
+        # GET: \u8fd4\u56de\u72b6\u6001
+        token = telegram_bot._read_token()
+        chat_id = telegram_bot._read_chat_id()
+        running = False
+        bot_name = None
+        try:
+            import subprocess
+            out = subprocess.check_output(['pgrep', '-f', 'telegram_bot_runner']).decode().strip()
+            running = bool(out)
+        except Exception:
+            running = False
+        if token:
+            try:
+                import asyncio, telegram
+                bot = telegram.Bot(token=token)
+                me = asyncio.run(bot.get_me())
+                bot_name = me.full_name if me.full_name else me.username
+            except Exception:
+                pass
+        return jsonify({
+            'token_set': bool(token),
+            'running': running,
+            'bot_name': bot_name,
+            'users': 1 if chat_id else 0,
+            'token_preview': token[:10] + '...' if token else None,
+        })
+
+
 if __name__ == '__main__':
     load_tasks()
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     print(f"yt2bili Web 监控面板: http://127.0.0.1:{port}")
+    telegram_bot.set_start_task_callback(start_new_task)
+    telegram_bot.run_bot()
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)

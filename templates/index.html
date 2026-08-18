@@ -222,6 +222,28 @@
             <span class="clear-result" id="clearResult"></span>
           </div>
         </div>
+        <div class="profile-sub">
+          <div class="profile-sub-head">
+            <span class="profile-sub-title">Telegram 机器人</span>
+            <span class="profile-sub-hint">配置 Bot Token，私聊发送 YouTube 链接自动下载翻译上传</span>
+          </div>
+          <div class="telegram-setup">
+            <div class="proxy-row">
+              <div class="proxy-input-wrap" style="flex:1">
+                <input id="tgTokenInput" type="text" placeholder="输入 Bot Token: 123456:ABC-DEF..." autocomplete="off">
+                <span class="tg-status" id="tgStatus" style="font-size:12.5px;color:var(--dim);margin-top:4px;display:inline-block"></span>
+              </div>
+              <button class="cookie-btn primary" onclick="saveTgToken()" id="tgSaveBtn">保存 Token</button>
+            </div>
+            <div class="tg-hints" style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
+              <span class="proxy-status" id="tgBotStatus" style="font-size:12px">检测中...</span>
+              <span style="font-size:11.5px;color:var(--dim);line-height:1.5">
+                在 Telegram 搜索你的 bot → 发 <code>/start</code> 开始使用<br>
+                直接发 YouTube 链接即可自动下载→翻译→上传 B 站
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </div>
