@@ -218,52 +218,62 @@ def run_task(task_id, url):
     client_opt = ['--extractor-args', 'youtube:player_client=android']
 
     try:
-        # ===== 1. 获取视频信息 =====
+        # ===== 1. 获取视频信息（重试时复用已有信息，跳过联网）=====
         task['phase'] = '获取信息'
-        log("📋 获取视频信息...")
-        proxy_opt = ['--proxy', cfg['proxy']] if cfg['proxy'] else []
-        ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
-        meta_out = run_cmd_with_cookies_fallback(
-            [YTBIN, '--print-json', '--skip-download'] + ejs_opt + client_opt + proxy_opt + [url],
-            ck_opt, timeout=30, log_func=log)
-        info = json.loads(meta_out)
-        vid = info['id']
-        title = info['title']
-        task['title'] = title
-        task['video_id'] = vid
-        task['phase'] = '获取信息'
-        log(f"✅ 视频: {title}")
+        vid = task.get('video_id', '')
+        title = task.get('title', '')
+        if vid and title and title != '处理中...':
+            log(f"♻️ 复用已有视频信息: {title}")
+        else:
+            log("📋 获取视频信息...")
+            proxy_opt = ['--proxy', cfg['proxy']] if cfg['proxy'] else []
+            ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
+            meta_out = run_cmd_with_cookies_fallback(
+                [YTBIN, '--print-json', '--skip-download'] + ejs_opt + client_opt + proxy_opt + [url],
+                ck_opt, timeout=30, log_func=log)
+            info = json.loads(meta_out)
+            vid = info['id']
+            title = info['title']
+            task['title'] = title
+            task['video_id'] = vid
+            log(f"✅ 视频: {title}")
 
-        # ===== 2. 下载 =====
+        # ===== 2. 下载（已有视频文件则跳过）=====
         task['phase'] = '下载'
-        task['step'] = '下载视频与字幕'
-        task['progress'] = 10
-        log("⬇️ 下载视频和英文字幕...")
-        t_dl = time.time()
-        dl_state = {'last': 0.0}
+        video_file = task.get('video_file', '')
+        if video_file and os.path.exists(video_file) and os.path.getsize(video_file) > 0:
+            log(f"♻️ 已存在视频文件，跳过下载: {os.path.basename(video_file)}")
+            task['step'] = '已跳过下载'
+            task['progress'] = 30
+        else:
+            task['step'] = '下载视频与字幕'
+            task['progress'] = 10
+            log("⬇️ 下载视频和英文字幕...")
+            t_dl = time.time()
+            dl_state = {'last': 0.0}
 
-        def dl_cb(line):
-            m = re.search(r'\[download\]\s+([\d.]+)%', line)
-            if not m:
-                return False
-            pct = float(m.group(1))
-            if pct < dl_state['last'] - 1:      # 换文件了，进度重新开始
-                dl_state['last'] = 0.0
-            dl_state['last'] = max(dl_state['last'], pct)
-            task['progress'] = round(10 + dl_state['last'] / 100 * 20, 1)
-            task['step'] = f"下载视频与字幕 {dl_state['last']:.1f}%"
-            return True
+            def dl_cb(line):
+                m = re.search(r'\[download\]\s+([\d.]+)%', line)
+                if not m:
+                    return False
+                pct = float(m.group(1))
+                if pct < dl_state['last'] - 1:      # 换文件了，进度重新开始
+                    dl_state['last'] = 0.0
+                dl_state['last'] = max(dl_state['last'], pct)
+                task['progress'] = round(10 + dl_state['last'] / 100 * 20, 1)
+                task['step'] = f"下载视频与字幕 {dl_state['last']:.1f}%"
+                return True
 
-        run_cmd_with_cookies_fallback_stream(
-            [YTBIN] + ejs_opt + client_opt + proxy_opt + [
-            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
-            '--embed-subs', '--embed-thumbnail',
-            '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
-            ck_opt, timeout=300, log_func=log, progress_cb=dl_cb)
-        task['duration_download'] = round(time.time() - t_dl, 1)
-        log("✅ 下载完成")
-        task['progress'] = 30
+            run_cmd_with_cookies_fallback_stream(
+                [YTBIN] + ejs_opt + client_opt + proxy_opt + [
+                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
+                '--embed-subs', '--embed-thumbnail',
+                '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
+                ck_opt, timeout=300, log_func=log, progress_cb=dl_cb)
+            task['duration_download'] = round(time.time() - t_dl, 1)
+            log("✅ 下载完成")
+            task['progress'] = 30
 
         video_file = None
         for f in os.listdir(DOWNLOAD_DIR):
@@ -277,57 +287,70 @@ def run_task(task_id, url):
         task['video_file'] = video_file
         log(f"📁 视频: {os.path.basename(video_file)}")
 
-        # ===== 3. 翻译 =====
+        # ===== 3. 翻译（已有双语字幕则跳过）=====
         task['phase'] = '翻译'
-        task['step'] = '翻译 (本地 qwen2.5, 免费无限)'
-        task['progress'] = 40
-        log("🌐 AI 双语翻译中...")
-
-        en_sub = None
-        for f in os.listdir(DOWNLOAD_DIR):
-            if f.startswith(vid) and f.endswith('.en.vtt'):
-                en_sub = os.path.join(DOWNLOAD_DIR, f); break
-        if not en_sub:
-            vtts = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.vtt')]
-            if vtts: en_sub = vtts[0]
-
         output_srt = os.path.join(SUBTITLE_DIR, f'{vid}_bilingual_full.srt')
-        task['subtitle_count'] = 0
-        if en_sub:
-            t_tr = time.time()
-
-            def tr_cb(line):
-                m = re.search(r'\[(\d+)/(\d+)\]', line)
-                if not m:
-                    return False
-                try:
-                    cur, tot = int(m.group(1)), int(m.group(2))
-                    pct = cur / tot * 100 if tot else 0
-                except (ValueError, ZeroDivisionError):
-                    return False
-                task['progress'] = round(40 + pct / 100 * 30, 1)
-                task['step'] = f"翻译中 {pct:.1f}%"
-                return True
-
-            out = run_cmd_stream([PYTHON, TRANSLATE_PY, en_sub, output_srt, CONFIG],
-                                 timeout=3600, log_func=log, progress_cb=tr_cb)
-            task['duration_translate'] = round(time.time() - t_tr, 1)
-            m = re.search(r'完成:\s*(\d+)/(\d+)', out or '')
-            if m:
-                task['subtitle_count'] = int(m.group(1))
-            log("✅ 翻译完成")
+        if os.path.exists(output_srt) and os.path.getsize(output_srt) > 0:
+            log(f"♻️ 已存在双语字幕，跳过翻译: {os.path.basename(output_srt)}")
+            if not task.get('subtitle_count'):
+                with open(output_srt, encoding='utf-8') as f:
+                    task['subtitle_count'] = len(re.findall(r'\d+\n\d{2}:\d{2}:\d{2}', f.read()))
+            en_sub = None
+            for f in os.listdir(DOWNLOAD_DIR):
+                if f.startswith(vid) and f.endswith('.en.vtt'):
+                    en_sub = os.path.join(DOWNLOAD_DIR, f); break
         else:
-            log("⚠️ 无英文字幕, 跳过")
-            output_srt = None
+            task['step'] = '翻译 (本地 qwen2.5, 免费无限)'
+            task['progress'] = 40
+            log("🌐 AI 双语翻译中...")
+            task['subtitle_count'] = 0
+
+            en_sub = None
+            for f in os.listdir(DOWNLOAD_DIR):
+                if f.startswith(vid) and f.endswith('.en.vtt'):
+                    en_sub = os.path.join(DOWNLOAD_DIR, f); break
+            if not en_sub:
+                vtts = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.vtt')]
+                if vtts: en_sub = vtts[0]
+
+            if en_sub:
+                t_tr = time.time()
+
+                def tr_cb(line):
+                    m = re.search(r'\[(\d+)/(\d+)\]', line)
+                    if not m:
+                        return False
+                    try:
+                        cur, tot = int(m.group(1)), int(m.group(2))
+                        pct = cur / tot * 100 if tot else 0
+                    except (ValueError, ZeroDivisionError):
+                        return False
+                    task['progress'] = round(40 + pct / 100 * 30, 1)
+                    task['step'] = f"翻译中 {pct:.1f}%"
+                    return True
+
+                out = run_cmd_stream([PYTHON, TRANSLATE_PY, en_sub, output_srt, CONFIG],
+                                     timeout=3600, log_func=log, progress_cb=tr_cb)
+                task['duration_translate'] = round(time.time() - t_tr, 1)
+                m = re.search(r'完成:\s*(\d+)/(\d+)', out or '')
+                if m:
+                    task['subtitle_count'] = int(m.group(1))
+                log("✅ 翻译完成")
+            else:
+                log("⚠️ 无英文字幕, 跳过")
+                output_srt = None
         task['progress'] = 70
 
-        # ===== 4. 烧录字幕 =====
+        # ===== 4. 烧录字幕（已有烧录成品则跳过）=====
         task['phase'] = '烧录字幕'
         task['step'] = '烧录字幕'
         task['progress'] = 75
         final_video = os.path.join(FINAL_DIR, f'{vid}_final_bilingual.mp4')
         video_to_upload = video_file
-        if output_srt and os.path.exists(output_srt):
+        if os.path.exists(final_video) and os.path.getsize(final_video) > 0:
+            log(f"♻️ 已存在烧录成品，跳过烧录: {os.path.basename(final_video)}")
+            video_to_upload = final_video
+        elif output_srt and os.path.exists(output_srt):
             log("🎬 烧录字幕...")
             total_us = None
             dur = ffprobe_duration(video_file)
@@ -821,9 +844,9 @@ def api_retry():
         tasks[new_id] = {
             'id': new_id, 'status': 'queued', 'progress': 0,
             'step': '重试排队中...', 'title': t.get('title', '处理中...'),
-            'video_id': '', 'video_file': '', 'logs': [], 'url': url,
-            'created_at': time.time(), 'retry_of': task_id,
-            'duration': None, 'subtitle_count': 0,
+            'video_id': t.get('video_id', ''), 'video_file': t.get('video_file', ''),
+            'logs': [], 'url': url, 'created_at': time.time(), 'retry_of': task_id,
+            'duration': None, 'subtitle_count': t.get('subtitle_count', 0),
         }
         save_tasks()
     th = threading.Thread(target=run_task, args=(new_id, url), daemon=True)
