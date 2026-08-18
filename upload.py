@@ -23,6 +23,19 @@ def main():
     if not os.path.isfile(cookie):
         print(f"!! cookie文件不存在: {cookie}"); sys.exit(1)
 
+    # cookie 结构预检（对齐 biliup 期望的 cookie_info/token_info 格式）
+    try:
+        with open(cookie, encoding='utf-8') as f:
+            ck = json.load(f)
+    except Exception as e:
+        print(f"!! cookies.json 无法读取: {e}")
+        print("!! 请在 Web 页面「上传 Bilibili」处重新扫码登录后重试"); sys.exit(1)
+    if not isinstance(ck, dict) or 'cookie_info' not in ck or 'token_info' not in ck:
+        print("!! cookies.json 格式不正确: 缺少 cookie_info/token_info 字段（可能是旧版本生成）")
+        print("!! 请在 Web 页面「上传 Bilibili」处重新扫码登录后重试"); sys.exit(1)
+    if not ck.get('cookie_info', {}).get('cookies'):
+        print("!! cookies.json 中未找到 cookie 列表，请重新扫码登录后重试"); sys.exit(1)
+
     # 找 bili_webup
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), '../.venv/lib/python3.11/site-packages'))
     # 尝试找 venv 路径
