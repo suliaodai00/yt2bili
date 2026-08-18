@@ -25,7 +25,9 @@ gemini_api_key: ""
 gemini_model: gemini-2.5-flash
 
 # ---- 下载 ----
-# 若需代理下载 YouTube，填如 http://127.0.0.1:7890，留空则直连
+# 数据中心 IP 常被 YouTube 风控（报 "Sign in to confirm you're not a bot"）。
+# 解决方式：VPS 上跑 `bash install_snell_proxy.sh <服务器> <端口> <psk> [版本]`
+# 把 snell 节点转成本地代理，然后这里填:
 proxy: ""
 
 # ---- 上传 ----
