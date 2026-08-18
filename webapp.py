@@ -139,7 +139,7 @@ def run_task(task_id, url):
         proxy_opt = ['--proxy', cfg['proxy']] if cfg['proxy'] else []
         ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
         meta_out = run_cmd_with_cookies_fallback(
-            [YTBIN, '--print-json', '--skip-download'] + ejs_opt + proxy_opt,
+            [YTBIN, '--print-json', '--skip-download'] + ejs_opt + proxy_opt + [url],
             ck_opt, timeout=30, log_func=log)
         info = json.loads(meta_out)
         vid = info['id']
