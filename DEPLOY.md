@@ -25,6 +25,31 @@
 
 ## 部署步骤（VPS 上 /opt/yt2bili）
 
+### 方式一：git 拉取（推荐）
+
+仓库：`https://github.com/suliaodai00/yt2bili.git`（私有，需在 VPS 配置凭证）
+
+```bash
+# 1. VPS 上配置 GitHub 访问（二选一）
+#   a. 部署密钥（推荐）：GitHub 仓库 Settings → Deploy keys 添加 VPS 公钥
+#   b. 或使用 PAT：git clone https://<USER>:<TOKEN>@github.com/suliaodai00/yt2bili.git
+
+# 2. 克隆到服务器
+git clone https://github.com/suliaodai00/yt2bili.git /opt/yt2bili
+cd /opt/yt2bili
+
+# 3. 安装依赖
+bash setup.sh                      # 自动装系统依赖/venv/依赖/Ollama(qwen2.5:3b)
+
+# 4. 生成配置并启动
+cp config.yaml.example config.yaml # 按需修改
+nohup python3 webapp.py 5000 > webapp.log 2>&1 &
+```
+
+后续更新代码：`cd /opt/yt2bili && git pull` 后重启 `webapp.py` 即可。
+
+### 方式二：tar 包
+
 1. **备份旧版本**（可选）：
    ```bash
    cd /opt/yt2bili && tar czf ~/yt2bili-bak-$(date +%F).tar.gz webapp.py 2>/dev/null
