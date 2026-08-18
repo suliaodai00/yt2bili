@@ -131,6 +131,8 @@ def run_task(task_id, url):
     if os.path.exists(deno_dir):
         os.environ['PATH'] = f"{deno_dir}:{os.environ.get('PATH', '')}"
     ejs_opt = ['--remote-components', 'ejs:github']
+    # 用 android 客户端规避数据中心 IP 的 bot 检测（cookies 失效时仍可下载）
+    client_opt = ['--extractor-args', 'youtube:player_client=android']
 
     try:
         # ===== 1. 获取视频信息 =====
@@ -139,7 +141,7 @@ def run_task(task_id, url):
         proxy_opt = ['--proxy', cfg['proxy']] if cfg['proxy'] else []
         ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
         meta_out = run_cmd_with_cookies_fallback(
-            [YTBIN, '--print-json', '--skip-download'] + ejs_opt + proxy_opt + [url],
+            [YTBIN, '--print-json', '--skip-download'] + ejs_opt + client_opt + proxy_opt + [url],
             ck_opt, timeout=30, log_func=log)
         info = json.loads(meta_out)
         vid = info['id']
@@ -156,7 +158,7 @@ def run_task(task_id, url):
         log("⬇️ 下载视频和英文字幕...")
         t_dl = time.time()
         run_cmd_with_cookies_fallback(
-            [YTBIN] + ejs_opt + proxy_opt + [
+            [YTBIN] + ejs_opt + client_opt + proxy_opt + [
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
             '--embed-subs', '--embed-thumbnail',
