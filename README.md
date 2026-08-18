@@ -12,17 +12,19 @@ YouTube 下载 → 本地 Ollama 双语翻译 → Bilibili 一键上传 的 Web 
 - 任务持久化：记录写入 `output/tasks.json`，服务重启不丢失
 - 移动端适配
 
-## 部署（VPS）
+## 部署（VPS，一键）
 
 ```bash
 git clone https://github.com/suliaodai00/yt2bili.git /opt/yt2bili
 cd /opt/yt2bili
-bash setup.sh                          # 系统依赖 + venv + Ollama + 依赖
-cp config.yaml.example config.yaml     # 按需修改
-nohup python3 webapp.py 5000 > webapp.log 2>&1 &
+bash deploy.sh          # 自动完成全部安装与启动
 ```
 
-详细步骤与加速配置见 [DEPLOY.md](DEPLOY.md)。
+`deploy.sh` 自动完成：系统依赖 → venv → Python 依赖 → Ollama（并行配置）→ 翻译模型（按内存自动选 `qwen2.5:3b/7b`）→ `config.yaml` → systemd 服务（开机自启）→ 健康检查。
+
+后续更新：`cd /opt/yt2bili && git pull && bash deploy.sh`
+
+详细说明见 [DEPLOY.md](DEPLOY.md)。
 
 ## 依赖
 

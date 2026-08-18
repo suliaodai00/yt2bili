@@ -25,28 +25,23 @@
 
 ## 部署步骤（VPS 上 /opt/yt2bili）
 
-### 方式一：git 拉取（推荐）
-
-仓库：`https://github.com/suliaodai00/yt2bili.git`（私有，需在 VPS 配置凭证）
+### 方式一：一键部署脚本（推荐）
 
 ```bash
-# 1. VPS 上配置 GitHub 访问（二选一）
-#   a. 部署密钥（推荐）：GitHub 仓库 Settings → Deploy keys 添加 VPS 公钥
-#   b. 或使用 PAT：git clone https://<USER>:<TOKEN>@github.com/suliaodai00/yt2bili.git
-
-# 2. 克隆到服务器
+# 首次（需先配置仓库访问凭证，见下）
 git clone https://github.com/suliaodai00/yt2bili.git /opt/yt2bili
 cd /opt/yt2bili
-
-# 3. 安装依赖
-bash setup.sh                      # 自动装系统依赖/venv/依赖/Ollama(qwen2.5:3b)
-
-# 4. 生成配置并启动
-cp config.yaml.example config.yaml # 按需修改
-nohup python3 webapp.py 5000 > webapp.log 2>&1 &
+bash deploy.sh
 ```
 
-后续更新代码：`cd /opt/yt2bili && git pull` 后重启 `webapp.py` 即可。
+`deploy.sh` 幂等可重复执行，自动完成：
+系统依赖（ffmpeg/python3-venv）→ `.venv` + Python 依赖 → Ollama 安装与并行配置（`OLLAMA_NUM_PARALLEL=3`）→ 翻译模型自动选择（内存 ≥14G 用 `qwen2.5:7b`，否则 `qwen2.5:3b`）→ 生成 `config.yaml` → 安装 systemd 服务（开机自启）→ 健康检查。
+
+后续更新：`cd /opt/yt2bili && git pull && bash deploy.sh`（自动重启服务）
+
+**私有仓库访问凭证**（任选其一）：
+- 部署密钥（推荐）：VPS 生成 `ssh-keygen -t ed25519`，公钥加到 GitHub 仓库 `Settings → Deploy keys`，然后 `git clone git@github.com:suliaodai00/yt2bili.git`
+- PAT：`git clone https://<用户名>:<TOKEN>@github.com/suliaodai00/yt2bili.git`
 
 ### 方式二：tar 包
 
