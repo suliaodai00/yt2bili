@@ -84,8 +84,9 @@ def run_cmd(cmd_list, timeout=300, log_func=None):
     return proc.stdout
 
 
-def run_cmd_with_cookies_fallback(cmd_list, ck_opt, timeout=300, log_func=None):
-    """带 cookies 执行；若失败（cookie 失效触发反爬等）自动去掉 cookies 重试一次"""
+def run_cmd_with_cookies_fallback(cmd_list, ck_opt, timeout=300, log_func=None, fallback_client_opt=None):
+    """带 cookies 执行；若失败（cookie 失效触发反爬等）自动去掉 cookies 重试一次。
+    fallback_client_opt: 回退直连时追加的参数（如 android 客户端规避风控）"""
     try:
         return run_cmd(cmd_list + ck_opt, timeout=timeout, log_func=log_func)
     except Exception:
@@ -93,7 +94,7 @@ def run_cmd_with_cookies_fallback(cmd_list, ck_opt, timeout=300, log_func=None):
             raise
         if log_func:
             log_func("⚠️ YouTube cookies 可能已失效，自动改用直连重试...")
-        return run_cmd(cmd_list, timeout=timeout, log_func=log_func)
+        return run_cmd(cmd_list + (fallback_client_opt or []), timeout=timeout, log_func=log_func)
 
 
 def run_cmd_stream(cmd_list, timeout=300, log_func=None, progress_cb=None):
@@ -155,8 +156,9 @@ def run_cmd_stream(cmd_list, timeout=300, log_func=None, progress_cb=None):
     return bytes(out).decode('utf-8', 'replace')
 
 
-def run_cmd_with_cookies_fallback_stream(cmd_list, ck_opt, timeout=300, log_func=None, progress_cb=None):
-    """带 cookies 的流式版本；失败时自动去掉 cookies 重试一次"""
+def run_cmd_with_cookies_fallback_stream(cmd_list, ck_opt, timeout=300, log_func=None, progress_cb=None, fallback_client_opt=None):
+    """带 cookies 的流式版本；失败时自动去掉 cookies 重试一次
+    fallback_client_opt: 回退直连时追加的参数（如 android 客户端规避风控）"""
     try:
         return run_cmd_stream(cmd_list + ck_opt, timeout=timeout, log_func=log_func, progress_cb=progress_cb)
     except Exception:
@@ -164,7 +166,7 @@ def run_cmd_with_cookies_fallback_stream(cmd_list, ck_opt, timeout=300, log_func
             raise
         if log_func:
             log_func("⚠️ YouTube cookies 可能已失效，自动改用直连重试...")
-        return run_cmd_stream(cmd_list, timeout=timeout, log_func=log_func, progress_cb=progress_cb)
+        return run_cmd_stream(cmd_list + (fallback_client_opt or []), timeout=timeout, log_func=log_func, progress_cb=progress_cb)
 
 
 def ffprobe_duration(path):
@@ -177,6 +179,15 @@ def ffprobe_duration(path):
         return float(d['format']['duration'])
     except Exception:
         return None
+
+
+def _safe_remove(path):
+    """尽力删除文件，失败静默"""
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
 
 
 def _touch_task(task_id, status=None, progress=None, step=None):
@@ -214,8 +225,14 @@ def run_task(task_id, url):
     if os.path.exists(deno_dir):
         os.environ['PATH'] = f"{deno_dir}:{os.environ.get('PATH', '')}"
     ejs_opt = ['--remote-components', 'ejs:github']
-    # 用 android 客户端规避数据中心 IP 的 bot 检测（cookies 失效时仍可下载）
-    client_opt = ['--extractor-args', 'youtube:player_client=android']
+    android_opt = ['--extractor-args', 'youtube:player_client=android']
+    # 有 cookies 时用默认客户端（android 不支持 cookies 会被跳过），cookies 失效回退时改用 android 规避风控
+    if cfg.get('youtube_cookies'):
+        client_opt = []
+        fallback_client = android_opt
+    else:
+        client_opt = android_opt
+        fallback_client = None
 
     try:
         # ===== 1. 获取视频信息（重试时复用已有信息，跳过联网）=====
@@ -230,7 +247,7 @@ def run_task(task_id, url):
             ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
             meta_out = run_cmd_with_cookies_fallback(
                 [YTBIN, '--print-json', '--skip-download'] + ejs_opt + client_opt + proxy_opt + [url],
-                ck_opt, timeout=30, log_func=log)
+                ck_opt, timeout=30, log_func=log, fallback_client_opt=fallback_client)
             info = json.loads(meta_out)
             vid = info['id']
             title = info['title']
@@ -270,7 +287,7 @@ def run_task(task_id, url):
                 '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
                 '--embed-subs', '--embed-thumbnail',
                 '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
-                ck_opt, timeout=300, log_func=log, progress_cb=dl_cb)
+                ck_opt, timeout=300, log_func=log, progress_cb=dl_cb, fallback_client_opt=fallback_client)
             task['duration_download'] = round(time.time() - t_dl, 1)
             log("✅ 下载完成")
             task['progress'] = 30
@@ -372,12 +389,18 @@ def run_task(task_id, url):
                 return True
 
             try:
-                run_cmd_stream(burn_cmd, timeout=600, log_func=log, progress_cb=burn_cb)
+                run_cmd_stream(burn_cmd, timeout=900, log_func=log, progress_cb=burn_cb)
                 if os.path.exists(final_video) and os.path.getsize(final_video) > 0:
                     log("✅ 烧录完成")
                     video_to_upload = final_video
-            except Exception:
-                pass
+                else:
+                    log("⚠️ 烧录未生成有效文件，将上传原视频（无字幕）")
+            except subprocess.TimeoutExpired:
+                log(f"❌ 烧录超时({900}s)，清理不完整产物，将上传原视频（无字幕）")
+                _safe_remove(final_video)
+            except Exception as e:
+                log(f"⚠️ 烧录失败: {str(e)[:120]}，将上传原视频（无字幕）")
+                _safe_remove(final_video)
         task['progress'] = 85
 
         # ===== 5. 上传 =====
@@ -788,6 +811,9 @@ def bili_login_status():
     for c in st['jar']:
         if c.name and c.value:
             cookie_dict[c.name] = c.value
+
+    if not cookie_dict:
+        return jsonify({'status': 'error', 'message': '登录成功但未获取到 Cookie（会话异常），请重新扫码'})
 
     token_info = {
         'mid': inner.get('mid', ''),
