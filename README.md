@@ -14,15 +14,23 @@ YouTube 下载 → 本地 Ollama 双语翻译 → Bilibili 一键上传 的 Web 
 
 ## 部署（VPS，一键）
 
+**远程一键**（最简，自动克隆到 `/opt/yt2bili`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/suliaodai00/yt2bili/main/deploy.sh | bash
+```
+
+或手动 clone 后执行：
+
 ```bash
 git clone https://github.com/suliaodai00/yt2bili.git /opt/yt2bili
 cd /opt/yt2bili
-bash deploy.sh          # 自动完成全部安装与启动
+bash deploy.sh
 ```
 
-`deploy.sh` 自动完成：系统依赖 → venv → Python 依赖 → Ollama（并行配置）→ 翻译模型（按内存自动选 `qwen2.5:3b/7b`）→ `config.yaml` → systemd 服务（开机自启）→ 健康检查。
+`deploy.sh` 自动完成：系统依赖 → venv → Python 依赖 → Ollama（并行配置）→ 翻译模型（按内存自动选 `qwen2.5:3b/7b`）→ `config.yaml` → systemd 服务（开机自启）→ 健康检查。幂等，可重复执行。
 
-后续更新：`cd /opt/yt2bili && git pull && bash deploy.sh`
+后续更新：`cd /opt/yt2bili && git pull && bash deploy.sh`（或重跑远程一键命令）
 
 详细说明见 [DEPLOY.md](DEPLOY.md)。
 

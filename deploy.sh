@@ -13,6 +13,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [ ! -f "$SCRIPT_DIR/webapp.py" ]; then
+  INSTALL_DIR="${INSTALL_DIR:-/opt/yt2bili}"
+  REPO_URL="${REPO_URL:-https://github.com/suliaodai00/yt2bili.git}"
+  echo "[$(date +%H:%M:%S)] 未在项目目录内，自动克隆仓库到 ${INSTALL_DIR} ..."
+  if [ ! -d "$INSTALL_DIR/.git" ]; then
+    git clone "$REPO_URL" "$INSTALL_DIR" || { echo "[✗] 克隆失败，请检查网络或先手动 git clone"; exit 1; }
+  fi
+  cd "$INSTALL_DIR"
+  SCRIPT_DIR="$INSTALL_DIR"
+fi
 cd "$SCRIPT_DIR"
 
 if [ ! -f webapp.py ]; then

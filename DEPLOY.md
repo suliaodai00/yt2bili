@@ -27,8 +27,15 @@
 
 ### 方式一：一键部署脚本（推荐）
 
+**远程一键**（自动克隆到 `/opt/yt2bili` 后部署）：
+
 ```bash
-# 首次（需先配置仓库访问凭证，见下）
+curl -fsSL https://raw.githubusercontent.com/suliaodai00/yt2bili/main/deploy.sh | bash
+```
+
+或手动 clone：
+
+```bash
 git clone https://github.com/suliaodai00/yt2bili.git /opt/yt2bili
 cd /opt/yt2bili
 bash deploy.sh
@@ -37,11 +44,7 @@ bash deploy.sh
 `deploy.sh` 幂等可重复执行，自动完成：
 系统依赖（ffmpeg/python3-venv）→ `.venv` + Python 依赖 → Ollama 安装与并行配置（`OLLAMA_NUM_PARALLEL=3`）→ 翻译模型自动选择（内存 ≥14G 用 `qwen2.5:7b`，否则 `qwen2.5:3b`）→ 生成 `config.yaml` → 安装 systemd 服务（开机自启）→ 健康检查。
 
-后续更新：`cd /opt/yt2bili && git pull && bash deploy.sh`（自动重启服务）
-
-**私有仓库访问凭证**（任选其一）：
-- 部署密钥（推荐）：VPS 生成 `ssh-keygen -t ed25519`，公钥加到 GitHub 仓库 `Settings → Deploy keys`，然后 `git clone git@github.com:suliaodai00/yt2bili.git`
-- PAT：`git clone https://<用户名>:<TOKEN>@github.com/suliaodai00/yt2bili.git`
+后续更新：`cd /opt/yt2bili && git pull && bash deploy.sh`（自动重启服务），或重跑远程一键命令。
 
 ### 方式二：tar 包
 
