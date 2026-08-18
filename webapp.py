@@ -84,6 +84,18 @@ def run_cmd(cmd_list, timeout=300, log_func=None):
     return proc.stdout
 
 
+def run_cmd_with_cookies_fallback(cmd_list, ck_opt, timeout=300, log_func=None):
+    """带 cookies 执行；若失败（cookie 失效触发反爬等）自动去掉 cookies 重试一次"""
+    try:
+        return run_cmd(cmd_list + ck_opt, timeout=timeout, log_func=log_func)
+    except Exception:
+        if not ck_opt:
+            raise
+        if log_func:
+            log_func("⚠️ YouTube cookies 可能已失效，自动改用直连重试...")
+        return run_cmd(cmd_list, timeout=timeout, log_func=log_func)
+
+
 def _touch_task(task_id, status=None, progress=None, step=None):
     """更新任务字段并持久化"""
     with lock:
@@ -126,8 +138,9 @@ def run_task(task_id, url):
         log("📋 获取视频信息...")
         proxy_opt = ['--proxy', cfg['proxy']] if cfg['proxy'] else []
         ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
-        meta_cmd = [YTBIN, '--print-json', '--skip-download'] + ejs_opt + proxy_opt + ck_opt + [url]
-        meta_out = run_cmd(meta_cmd, timeout=30, log_func=log)
+        meta_out = run_cmd_with_cookies_fallback(
+            [YTBIN, '--print-json', '--skip-download'] + ejs_opt + proxy_opt,
+            ck_opt, timeout=30, log_func=log)
         info = json.loads(meta_out)
         vid = info['id']
         title = info['title']
@@ -141,13 +154,14 @@ def run_task(task_id, url):
         task['step'] = '下载视频与字幕'
         task['progress'] = 10
         log("⬇️ 下载视频和英文字幕...")
-        dl_cmd = [YTBIN] + ejs_opt + proxy_opt + ck_opt + [
+        t_dl = time.time()
+        run_cmd_with_cookies_fallback(
+            [YTBIN] + ejs_opt + proxy_opt + [
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
             '--embed-subs', '--embed-thumbnail',
-            '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url]
-        t_dl = time.time()
-        run_cmd(dl_cmd, timeout=300, log_func=log)
+            '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
+            ck_opt, timeout=300, log_func=log)
         task['duration_download'] = round(time.time() - t_dl, 1)
         log("✅ 下载完成")
         task['progress'] = 30
