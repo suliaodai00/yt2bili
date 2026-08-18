@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>yt2bili 监控台</title>
+<meta name="application-name" content="Y2B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Y2B">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#070b14">
+<link rel="manifest" href="/static/site.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/static/icons/y2b-icon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -54,6 +62,34 @@
     <div class="stat-card c-subs">
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg></div>
       <div class="stat-label">翻译字幕</div><div class="stat-value" id="stSubs">0</div>
+    </div>
+  </section>
+
+  <section class="assistant-stage" id="assistantStage" aria-label="任务助手">
+    <div class="mascot-wrap mascot-left">
+      <div class="live2d-panel" id="live2dPanel22">
+        <div class="live2d-tip" id="live2dTip22">22娘已就位</div>
+        <canvas id="live2dCanvas22" class="live2d-canvas" width="520" height="620"></canvas>
+      </div>
+    </div>
+    <div class="assistant-copy">
+      <div class="assistant-kicker">Y2B 任务助手</div>
+      <div class="assistant-line" id="assistantLine">等待新的 YouTube 链接</div>
+      <div class="assistant-progress">
+        <div class="assistant-progress-head">
+          <span>整体任务进度</span>
+          <strong id="assistantPercent">0%</strong>
+        </div>
+        <div class="assistant-progress-track">
+          <div class="assistant-progress-fill" id="assistantProgressFill" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="mascot-wrap mascot-right">
+      <div class="live2d-panel" id="live2dPanel33">
+        <div class="live2d-tip" id="live2dTip33">33娘已就位</div>
+        <canvas id="live2dCanvas33" class="live2d-canvas" width="520" height="620"></canvas>
+      </div>
     </div>
   </section>
 
@@ -173,6 +209,8 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="/static/vendor/live2d.min.js"></script>
+<script src="/static/live2d-2233.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

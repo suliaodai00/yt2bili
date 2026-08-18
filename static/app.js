@@ -191,6 +191,49 @@ function renderStats(s) {
   $('stSubs').textContent = s.subtitle_count ?? 0;
 }
 
+function renderAssistant() {
+  const stage = $('assistantStage');
+  if (!stage) return;
+  const tasks = Object.values(allTasks);
+  const running = tasks.filter(t => ['queued', 'running'].includes(t.status));
+  const errors = tasks.filter(t => t.status === 'error');
+  const done = tasks.filter(t => t.status === 'done');
+  let pct = 0;
+  let line = '等待新的 YouTube 链接';
+  let state = 'empty';
+
+  if (tasks.length) {
+    const totalProgress = tasks.reduce((sum, t) => sum + Number(t.progress || 0), 0);
+    pct = Math.round(totalProgress / tasks.length);
+    if (running.length) {
+      const active = running.sort((a, b) => (b.created_at || 0) - (a.created_at || 0))[0];
+      const activePct = Math.round(Number(active.progress || 0));
+      pct = activePct;
+      state = 'running';
+      line = (active.step || '任务处理中') + ' · ' + activePct + '%';
+    } else if (errors.length) {
+      state = 'error';
+      line = '有任务失败，点开日志查看原因';
+    } else if (done.length === tasks.length) {
+      pct = 100;
+      state = 'done';
+      line = '全部任务已完成，可以继续投喂链接';
+    } else {
+      state = 'empty';
+      line = '任务队列已同步';
+    }
+  }
+
+  stage.classList.remove('state-empty', 'state-running', 'state-done', 'state-error');
+  stage.classList.add('state-' + state);
+  $('assistantLine').textContent = line;
+  $('assistantPercent').textContent = pct + '%';
+  $('assistantProgressFill').style.width = pct + '%';
+  if (window.y2bLive2D && typeof window.y2bLive2D.setState === 'function') {
+    window.y2bLive2D.setState(state, line, pct);
+  }
+}
+
 /* ================= 任务列表 ================= */
 function taskCardsHtml() {
   let list = Object.values(allTasks).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
@@ -238,6 +281,7 @@ function taskCardsHtml() {
 
 function renderTasks() {
   $('taskList').innerHTML = taskCardsHtml();
+  renderAssistant();
 }
 
 function toggleLog(tid) {
