@@ -1019,6 +1019,67 @@ def api_delete_files():
     })
 
 
+@app.route('/api/clear-all', methods=['POST'])
+def api_clear_all():
+    """清除全部 yt2bili 生成/缓存文件（视频/字幕/烧录成品/任务记录），保留 cookie 与代理配置。"""
+    # 统计已生成文件，便于反馈
+    total_size = 0
+    counts = {'downloads': 0, 'subtitles': 0, 'final': 0}
+    for root, dirs, files in os.walk(DOWNLOAD_DIR):
+        for fn in files:
+            counts['downloads'] += 1
+            p = os.path.join(root, fn)
+            try:
+                total_size += os.path.getsize(p)
+            except OSError:
+                pass
+    for root, dirs, files in os.walk(SUBTITLE_DIR):
+        for fn in files:
+            counts['subtitles'] += 1
+            p = os.path.join(root, fn)
+            try:
+                total_size += os.path.getsize(p)
+            except OSError:
+                pass
+    for root, dirs, files in os.walk(FINAL_DIR):
+        for fn in files:
+            counts['final'] += 1
+            p = os.path.join(root, fn)
+            try:
+                total_size += os.path.getsize(p)
+            except OSError:
+                pass
+
+    # 删除所有生成文件
+    removed = 0
+    for d in (DOWNLOAD_DIR, SUBTITLE_DIR, FINAL_DIR):
+        if not os.path.isdir(d):
+            continue
+        for fn in os.listdir(d):
+            p = _safe_path(d, fn)
+            if p and os.path.isfile(p):
+                try:
+                    os.remove(p)
+                    removed += 1
+                except OSError:
+                    pass
+
+    # 清空任务记录
+    task_count = len(tasks)
+    with lock:
+        tasks.clear()
+        save_tasks()
+
+    return jsonify({
+        'ok': True,
+        'removed': removed,
+        'tasks_cleared': task_count,
+        'freed_mb': round(total_size / 1048576, 1),
+        'stats': counts,
+        'kept': ['config.yaml', 'cookies.json', 'youtube_cookies.txt'],
+    })
+
+
 if __name__ == '__main__':
     load_tasks()
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000

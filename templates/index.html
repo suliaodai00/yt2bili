@@ -211,6 +211,17 @@
             <div class="proxy-status" id="proxyStatus">检测中...</div>
           </div>
         </div>
+        <div class="profile-sub">
+          <div class="profile-sub-head">
+            <span class="profile-sub-title">数据清理</span>
+            <span class="profile-sub-hint">清除本机已生成的视频、字幕与烧录成品（保留 cookie 与代理配置）</span>
+          </div>
+          <div class="clear-row">
+            <span class="clear-hint">释放磁盘空间，任务记录一并清空。此操作不可恢复。</span>
+            <button class="cookie-btn danger-clear" id="clearAllBtn" onclick="clearAllFiles()">清除全部生成文件</button>
+            <span class="clear-result" id="clearResult"></span>
+          </div>
+        </div>
       </div>
     </section>
   </div>

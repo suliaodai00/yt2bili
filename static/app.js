@@ -439,6 +439,37 @@ function deleteFiles(tid) {
   }).catch(() => toast('删除失败', 'err'));
 }
 
+function clearAllFiles() {
+  const btn = document.getElementById('clearAllBtn');
+  const res = document.getElementById('clearResult');
+  if (btn) { btn.disabled = true; btn.textContent = '清除中...'; }
+  if (res) res.textContent = '';
+  if (!confirm('确认清除全部已生成的视频、字幕、烧录成品文件？
+同时会清空所有任务记录。
+
+cookie 与代理配置将保留。此操作不可恢复！')) {
+    if (btn) { btn.disabled = false; btn.textContent = '清除全部生成文件'; }
+    return;
+  }
+  fetch('/api/clear-all', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+  }).then(r => r.json()).then(d => {
+    if (btn) { btn.disabled = false; btn.textContent = '清除全部生成文件'; }
+    if (d.ok) {
+      const msg = '已清除 ' + d.removed + ' 个文件，清空 ' + d.tasks_cleared + ' 条任务，释放 ' + d.freed_mb + ' MB';
+      if (res) res.textContent = msg;
+      if (res) res.style.color = 'var(--ok)';
+      toast(msg, 'ok');
+      refreshAll();
+    } else {
+      toast(d.error || '清除失败', 'err');
+    }
+  }).catch(() => {
+    if (btn) { btn.disabled = false; btn.textContent = '清除全部生成文件'; }
+    toast('清除失败', 'err');
+  });
+}
+
 /* ================= 轮询 ================= */
 function refreshAll() {
   Promise.all([
