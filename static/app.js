@@ -282,6 +282,9 @@ function taskCardsHtml() {
     const tid = t.id;
     const st = t.status || 'error';
     const dur = t.duration ? '<span class="task-meta">' + fmtDur(t.duration) + '</span>' : '';
+    const elapsed = (st === 'running' || st === 'queued')
+      ? '<span class="task-meta task-elapsed" data-tid="' + tid + '">' + (st === 'queued' ? '排队中' : '已运行 --') + '</span>'
+      : '';
     const subs = t.subtitle_count ? '<span class="task-meta">字幕 ' + t.subtitle_count + ' 条</span>' : '';
     const open = visible.includes(tid);
     const logHtml = open && t.logs && t.logs.length
@@ -295,7 +298,7 @@ function taskCardsHtml() {
         <div class="task-head-left">
           <span class="tag tag-${st}">${statusLabel(st)}</span>
           <div class="task-title" title="${esc(t.title)}">${esc(t.title)}</div>
-          ${dur}${subs}${deletedMark}
+          ${dur}${elapsed}${subs}${deletedMark}
         </div>
         <div class="task-actions">
           <button class="mini-btn" onclick="toggleLog('${tid}')">${open ? '收起' : '日志'}</button>
@@ -337,6 +340,7 @@ function renderTasks() {
       else el.scrollTop = s.top;
     }
   });
+  updateElapsed();
   renderAssistant();
 }
 
@@ -454,6 +458,18 @@ function refreshAll() {
 
 function tick() {
   $('clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  updateElapsed();
+}
+
+function updateElapsed() {
+  const now = Date.now() / 1000;
+  document.querySelectorAll('.task-elapsed').forEach(el => {
+    const t = allTasks[el.dataset.tid];
+    if (!t) { el.textContent = ''; return; }
+    if (t.status === 'queued') { el.textContent = '排队中'; return; }
+    if (t.status !== 'running' || !t.started_at) { el.textContent = ''; return; }
+    el.textContent = '已运行 ' + fmtDur(now - t.started_at);
+  });
 }
 
 /* ================= 事件 ================= */
