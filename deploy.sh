@@ -52,7 +52,7 @@ command -v ffmpeg >/dev/null || info "ffmpeg 已存在或安装失败（烧录�
 step "2/6 创建 Python 虚拟环境并安装依赖..."
 [ -d .venv ] || python3 -m venv .venv
 .venv/bin/pip install -q --upgrade pip 2>/dev/null || true
-.venv/bin/pip install -q yt-dlp biliup pyyaml flask qrcode pillow
+.venv/bin/pip install -q --upgrade yt-dlp biliup pyyaml flask qrcode pillow
 info "Python 依赖安装完成"
 
 step "3/6 安装/配置 Ollama..."
