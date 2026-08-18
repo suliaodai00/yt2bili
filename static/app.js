@@ -444,10 +444,7 @@ function clearAllFiles() {
   const res = document.getElementById('clearResult');
   if (btn) { btn.disabled = true; btn.textContent = '清除中...'; }
   if (res) res.textContent = '';
-  if (!confirm('确认清除全部已生成的视频、字幕、烧录成品文件？
-同时会清空所有任务记录。
-
-cookie 与代理配置将保留。此操作不可恢复！')) {
+  if (!confirm('确认清除全部已生成的视频、字幕、烧录成品文件？\n同时会清空所有任务记录。\n\ncookie 与代理配置将保留。此操作不可恢复！')) {
     if (btn) { btn.disabled = false; btn.textContent = '清除全部生成文件'; }
     return;
   }
