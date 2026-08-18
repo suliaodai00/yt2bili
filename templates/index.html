@@ -8,6 +8,12 @@
 </head>
 <body>
 
+<div class="bg-decor">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
 <header class="topbar">
   <div class="brand">
     <span class="logo">▶</span>
@@ -25,12 +31,30 @@
 <main class="container">
 
   <section class="stats-grid">
-    <div class="stat-card"><div class="stat-label">总任务</div><div class="stat-value" id="stTotal">0</div></div>
-    <div class="stat-card"><div class="stat-label">进行中</div><div class="stat-value running" id="stRunning">0</div></div>
-    <div class="stat-card"><div class="stat-label">成功</div><div class="stat-value ok" id="stDone">0</div></div>
-    <div class="stat-card"><div class="stat-label">失败</div><div class="stat-value err" id="stError">0</div></div>
-    <div class="stat-card"><div class="stat-label">成功率</div><div class="stat-value" id="stRate">0%</div></div>
-    <div class="stat-card"><div class="stat-label">翻译字幕</div><div class="stat-value" id="stSubs">0</div></div>
+    <div class="stat-card c-total">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></div>
+      <div class="stat-label">总任务</div><div class="stat-value" id="stTotal">0</div>
+    </div>
+    <div class="stat-card c-running">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+      <div class="stat-label">进行中</div><div class="stat-value running" id="stRunning">0</div>
+    </div>
+    <div class="stat-card c-done">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#34f5a1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+      <div class="stat-label">成功</div><div class="stat-value ok" id="stDone">0</div>
+    </div>
+    <div class="stat-card c-error">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6b81" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
+      <div class="stat-label">失败</div><div class="stat-value err" id="stError">0</div>
+    </div>
+    <div class="stat-card c-rate">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ffc94d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-6M6 20V10M18 20V4"/></svg></div>
+      <div class="stat-label">成功率</div><div class="stat-value" id="stRate">0%</div>
+    </div>
+    <div class="stat-card c-subs">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg></div>
+      <div class="stat-label">翻译字幕</div><div class="stat-value" id="stSubs">0</div>
+    </div>
   </section>
 
   <section class="panel system-panel">
@@ -120,7 +144,12 @@
       <input id="urlInput" type="text" placeholder="粘贴 YouTube 链接, 回车开始..." autocomplete="off">
       <button id="startBtn" onclick="submitTask()">开始</button>
     </div>
-    <p class="flow">下载视频+英文字幕 → 本地 Ollama 双语翻译 → 烧录字幕 → 上传 Bilibili</p>
+    <p class="flow">
+      <span class="step">下载视频+英文字幕</span><span class="arr">→</span>
+      <span class="step">本地 Ollama 双语翻译</span><span class="arr">→</span>
+      <span class="step">烧录字幕</span><span class="arr">→</span>
+      <span class="step">上传 Bilibili</span>
+    </p>
   </section>
 
   <section class="panel">
