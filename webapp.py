@@ -518,12 +518,15 @@ def bili_login_status():
     inner = data.get('data') or {}
     state = inner.get('code', -1)
     if state == 0:
+        out = {}
+        for k in ('cookie_info', 'token_info'):
+            if inner.get(k):
+                out[k] = inner[k]
+        if inner.get('refresh_token'):
+            out['refresh_token'] = inner['refresh_token']
         cookies = {}
         for c in inner.get('cookie_info', {}).get('cookies', []):
             cookies[c['name']] = c['value']
-        out = {'cookies': cookies}
-        if inner.get('refresh_token'):
-            out['refresh_token'] = inner['refresh_token']
         _atomic_write_json(COOKIES, out)
         BILI_LOGIN_STATE.pop(qkey, None)
         return jsonify({'status': 'ok', 'message': '登录成功', 'user': cookies.get('DedeUserID', '')})
