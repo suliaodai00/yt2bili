@@ -552,18 +552,34 @@ def bili_login_status():
     inner = data.get('data') or {}
     state = inner.get('code', -1)
     if state == 0:
-        out = {}
-        for k in ('cookie_info', 'token_info'):
-            if inner.get(k):
-                out[k] = inner[k]
-        if inner.get('refresh_token'):
-            out['refresh_token'] = inner['refresh_token']
-        cookies = {}
+        cookie_dict = {}
+        # 从 HTTP 响应头 (Set-Cookie) 提取 cookies
+        try:
+            for c in st['jar']:
+                if c.name and c.value:
+                    cookie_dict[c.name] = c.value
+        except Exception:
+            pass
+        # 也从 JSON body 中的 cookie_info 提取
         for c in inner.get('cookie_info', {}).get('cookies', []):
-            cookies[c['name']] = c['value']
+            cookie_dict[c['name']] = c['value']
+        token_info = inner.get('token_info', {})
+        if not token_info and inner.get('access_token'):
+            token_info = {'access_token': inner['access_token'], 'refresh_token': inner.get('refresh_token', '')}
+        if not token_info and inner.get('refresh_token'):
+            token_info = {'access_token': '', 'refresh_token': inner['refresh_token']}
+        out = {
+            'cookie_info': {
+                'cookies': [{'name': k, 'value': v} for k, v in cookie_dict.items()],
+                'domains': inner.get('cookie_info', {}).get('domains', ['.bilibili.com', '.biliapi.net']),
+            },
+            'token_info': token_info,
+        }
+        if token_info.get('refresh_token'):
+            out['refresh_token'] = token_info['refresh_token']
         _atomic_write_json(COOKIES, out)
         BILI_LOGIN_STATE.pop(qkey, None)
-        return jsonify({'status': 'ok', 'message': '登录成功', 'user': cookies.get('DedeUserID', '')})
+        return jsonify({'status': 'ok', 'message': '登录成功', 'user': cookie_dict.get('DedeUserID', '')})
     if state == 86090:
         return jsonify({'status': 'scanned', 'message': '已扫码，请在手机确认'})
     if state == 86101:
