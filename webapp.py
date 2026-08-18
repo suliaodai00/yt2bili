@@ -258,7 +258,11 @@ def run_task(task_id, url):
     except Exception as e:
         task['status'] = 'error'
         task['step'] = '失败'
-        log(f"❌ 错误: {str(e)[:200]}")
+        msg = str(e)[:200]
+        if 'confirm' in msg.lower() and 'bot' in msg.lower():
+            log("🔑 当前服务器 IP 被 YouTube 风控，需要有效的 YouTube cookies")
+            log("💡 请用浏览器扩展（如 Get cookies.txt）导出已登录 YouTube 的 cookies 并上传")
+        log(f"❌ 错误: {msg}")
 
     task['finished_at'] = time.time()
     task['duration'] = round(time.time() - started, 1)
