@@ -20,6 +20,7 @@ DOWNLOAD_DIR = os.path.join(BASE, 'output', 'downloads')
 SUBTITLE_DIR = os.path.join(BASE, 'output', 'subtitles')
 FINAL_DIR = os.path.join(BASE, 'output', 'final')
 TRANSLATE_PY = os.path.join(BASE, 'translate.py')
+TRANSCRIBE_PY = os.path.join(BASE, 'transcribe.py')
 UPLOAD_PY = os.path.join(BASE, 'upload.py')
 DATA_FILE = os.path.join(BASE, 'output', 'tasks.json')
 
@@ -297,6 +298,7 @@ def run_task(task_id, url):
             run_cmd_with_cookies_fallback_stream(
                 [YTBIN] + ejs_opt + client_opt + proxy_opt + [
                 '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
+                '--merge-output-format', 'mp4',
                 '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
                 '--embed-subs', '--embed-thumbnail',
                 '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
@@ -349,6 +351,26 @@ def run_task(task_id, url):
             if not en_sub:
                 vtts = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.vtt')]
                 if vtts: en_sub = vtts[0]
+
+            # Whisper 语音识别后备: 无字幕时自动生成
+            if not en_sub:
+                log("⚠️ 未找到字幕, 使用 Whisper 语音识别生成...")
+                whisper_srt = os.path.join(SUBTITLE_DIR, f'{vid}_whisper.srt')
+                try:
+                    if os.path.exists(whisper_srt) and os.path.getsize(whisper_srt) > 0:
+                        en_sub = whisper_srt
+                        log("♻️ 复用已有 Whisper 字幕")
+                    else:
+                        run_cmd_stream(
+                            [PYTHON, TRANSCRIBE_PY, video_file, SUBTITLE_DIR, VENV],
+                            timeout=3600, log_func=log)
+                        if os.path.exists(whisper_srt) and os.path.getsize(whisper_srt) > 0:
+                            en_sub = whisper_srt
+                            log("✅ Whisper 语音识别完成")
+                        else:
+                            log("⚠️ Whisper 识别失败, 未生成字幕文件")
+                except Exception as e:
+                    log(f"⚠️ Whisper 识别出错: {e}")
 
             if en_sub:
                 t_tr = time.time()
