@@ -500,7 +500,39 @@ def api_cookies():
     return jsonify({
         'youtube': _f('YouTube', YOUTUBE_COOKIES),
         'bilibili': _f('Bilibili', COOKIES),
+        'proxy': read_config()['proxy'],
     })
+
+
+@app.route('/api/proxy', methods=['GET', 'POST'])
+def api_proxy():
+    """读取 / 保存下载代理配置（仅写 config.yaml 的 proxy 行，不碰系统设置）"""
+    if request.method == 'GET':
+        return jsonify({'proxy': read_config()['proxy']})
+    data = request.get_json(silent=True) or {}
+    proxy = (data.get('proxy') or '').strip()
+    if proxy and not re.match(r'^(https?|socks4|socks5)://', proxy):
+        return jsonify({'error': '代理地址需以 http://、https://、socks4:// 或 socks5:// 开头'}), 400
+    try:
+        lines = []
+        if os.path.exists(CONFIG):
+            with open(CONFIG, encoding='utf-8') as f:
+                lines = f.readlines()
+        found = False
+        for i, ln in enumerate(lines):
+            if re.match(r'\s*proxy\s*:', ln):
+                lines[i] = f'proxy: "{proxy}"\n'
+                found = True
+                break
+        if not found:
+            lines.append(f'proxy: "{proxy}"\n')
+        tmp = CONFIG + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        os.replace(tmp, CONFIG)
+        return jsonify({'ok': True, 'proxy': proxy})
+    except Exception as e:
+        return jsonify({'error': f'保存失败: {e}'}), 500
 
 
 # ============================================================

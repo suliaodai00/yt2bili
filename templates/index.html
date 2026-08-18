@@ -139,6 +139,27 @@
     </div>
   </section>
 
+  <section class="panel">
+    <div class="panel-head">
+      <h2>下载代理</h2>
+      <span class="panel-hint">数据中心 IP 被 YouTube 风控时，可切换代理下载</span>
+    </div>
+    <div class="proxy-row">
+      <div class="proxy-switch">
+        <label class="switch">
+          <input type="checkbox" id="proxyToggle">
+          <span class="slider"></span>
+        </label>
+        <span class="proxy-switch-label" id="proxyToggleLabel">代理：关闭</span>
+      </div>
+      <div class="proxy-input-wrap">
+        <input id="proxyInput" type="text" placeholder="http://127.0.0.1:1080 或 socks5://..." autocomplete="off" disabled>
+        <button class="cookie-btn primary" onclick="saveProxy()">保存代理</button>
+      </div>
+      <div class="proxy-status" id="proxyStatus">检测中...</div>
+    </div>
+  </section>
+
   <!-- Bilibili 扫码登录模态框 -->
   <div id="biliModal" class="modal-mask" style="display:none">
     <div class="modal">

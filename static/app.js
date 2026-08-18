@@ -120,6 +120,46 @@ function renderCookies(d) {
       st.textContent = '未配置（文件不存在）';
     }
   }
+  renderProxy(d.proxy);
+}
+
+/* ================= 下载代理 ================= */
+function renderProxy(proxy) {
+  const input = $('proxyInput');
+  const toggle = $('proxyToggle');
+  const label = $('proxyToggleLabel');
+  const status = $('proxyStatus');
+  const enabled = !!(proxy && proxy.trim());
+  input.value = proxy || '';
+  toggle.checked = enabled;
+  input.disabled = !enabled;
+  label.textContent = enabled ? '代理：开启' : '代理：关闭';
+  if (enabled) {
+    status.className = 'proxy-status ok';
+    status.textContent = '已启用 · ' + proxy;
+  } else {
+    status.className = 'proxy-status warn';
+    status.textContent = '未启用（直连下载）';
+  }
+}
+
+function saveProxy() {
+  const input = $('proxyInput');
+  const toggle = $('proxyToggle');
+  const proxy = toggle.checked ? input.value.trim() : '';
+  if (toggle.checked && !proxy) {
+    toast('请填写代理地址，或关闭开关', 'err');
+    return;
+  }
+  fetch('/api/proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ proxy })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { toast(d.error, 'err'); return; }
+    toast('代理配置已保存', 'ok');
+    renderProxy(d.proxy);
+  }).catch(() => toast('保存失败', 'err'));
 }
 
 /* ================= Cookie 在线登录 / 上传 ================= */
@@ -400,6 +440,13 @@ function tick() {
 
 /* ================= 事件 ================= */
 $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') submitTask(); });
+
+$('proxyToggle').addEventListener('change', e => {
+  const enabled = e.target.checked;
+  $('proxyInput').disabled = !enabled;
+  $('proxyToggleLabel').textContent = enabled ? '代理：开启' : '代理：关闭';
+  if (enabled && !$('proxyInput').value.trim()) $('proxyInput').focus();
+});
 
 $('tabBar').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
