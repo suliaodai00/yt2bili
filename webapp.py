@@ -3,7 +3,7 @@
 """yt2bili Web 监控面板 — 粘贴 YouTube 链接, 一键下载→翻译→上传B站
 含任务持久化、统计、服务器资源监控、失败重试。
 """
-import os, sys, json, time, subprocess, threading, re, shutil, urllib.request, io, base64, http.cookiejar
+import os, sys, json, time, subprocess, threading, re, shutil, urllib.request, urllib.parse, io, base64, http.cookiejar, hashlib
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, make_response
 
@@ -484,9 +484,12 @@ def api_cookies():
 
 
 # ============================================================
-# Cookie 在线登录 / 上传
+# Cookie 在线登录 / 上传 (B站 TV 登录接口，带 appkey+sign)
 # ============================================================
-BILI_LOGIN_STATE = {}   # qrcode_key -> {jar, created_at}
+BILI_LOGIN_STATE = {}   # auth_code -> {jar, created_at}
+
+BILI_APPKEY = '4409e2ce8ffd12b8'
+BILI_APPSEC = '59b43e04ad6965f34319062b478f83dd'
 
 
 def _atomic_write_json(path, obj):
@@ -496,23 +499,38 @@ def _atomic_write_json(path, obj):
     os.replace(tmp, path)
 
 
+def _bili_sign(params):
+    return hashlib.md5(f"{urllib.parse.urlencode(params)}{BILI_APPSEC}".encode()).hexdigest()
+
+
+def _bili_tv_post(path, data, jar):
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    data['ts'] = int(time.time())
+    data['sign'] = _bili_sign(data)
+    body = urllib.parse.urlencode(data).encode()
+    req = urllib.request.Request(
+        f'https://passport.bilibili.com/x/passport-tv-login/{path}',
+        data=body,
+        headers={'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded'})
+    raw = opener.open(req, timeout=10).read()
+    return json.loads(raw), jar
+
+
 @app.route('/api/bili-login/start', methods=['POST'])
 def bili_login_start():
-    """调用 B 站扫码登录接口生成二维码，返回 PNG base64 与 qrcode_key"""
+    """调用 B 站 TV 登录接口生成二维码"""
     jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
     try:
-        req = urllib.request.Request(
-            'https://passport.bilibili.com/x/passport-login/web/qrcode/generate',
-            headers={'User-Agent': UA, 'Referer': 'https://www.bilibili.com/'})
-        raw = opener.open(req, timeout=10).read()
-        data = json.loads(raw)
+        data, jar = _bili_tv_post('qrcode/auth_code', {
+            'appkey': BILI_APPKEY,
+            'local_id': '0',
+        }, jar)
     except Exception as e:
         return jsonify({'error': f'获取二维码失败: {str(e)[:100]}'}), 502
     if data.get('code') != 0:
         return jsonify({'error': f"B站返回: {data.get('message', data.get('code'))}"}), 502
 
-    qkey = data['data']['qrcode_key']
+    auth_code = data['data']['auth_code']
     qurl = data['data']['url']
     qr_b64 = ''
     try:
@@ -525,69 +543,55 @@ def bili_login_start():
         pass
 
     now = time.time()
-    for k in list(BILI_LOGIN_STATE):          # 清理 10 分钟前的旧会话
+    for k in list(BILI_LOGIN_STATE):
         if now - BILI_LOGIN_STATE[k]['created_at'] > 600:
             BILI_LOGIN_STATE.pop(k, None)
-    BILI_LOGIN_STATE[qkey] = {'jar': jar, 'created_at': now}
-    return jsonify({'key': qkey, 'qr': qr_b64, 'url': qurl})
+    BILI_LOGIN_STATE[auth_code] = {'jar': jar, 'created_at': now}
+    return jsonify({'key': auth_code, 'qr': qr_b64, 'url': qurl})
 
 
 @app.route('/api/bili-login/status')
 def bili_login_status():
-    qkey = request.args.get('key', '')
-    st = BILI_LOGIN_STATE.get(qkey)
+    auth_code = request.args.get('key', '')
+    st = BILI_LOGIN_STATE.get(auth_code)
     if not st:
         return jsonify({'status': 'expired', 'message': '登录会话已失效'}), 404
     try:
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(st['jar']))
-        req = urllib.request.Request(
-            f'https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key={qkey}',
-            headers={'User-Agent': UA, 'Referer': 'https://www.bilibili.com/'})
-        raw = opener.open(req, timeout=10).read()
-        data = json.loads(raw)
+        data, _ = _bili_tv_post('qrcode/poll', {
+            'appkey': BILI_APPKEY,
+            'auth_code': auth_code,
+            'local_id': '0',
+        }, st['jar'])
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)[:100]})
     if data.get('code') != 0:
-        return jsonify({'status': 'error', 'message': f"B站返回: {data.get('message', data.get('code'))}"})
-    inner = data.get('data') or {}
-    state = inner.get('code', -1)
-    if state == 0:
-        cookie_dict = {}
-        # 从 HTTP 响应头 (Set-Cookie) 提取 cookies
-        try:
-            for c in st['jar']:
-                if c.name and c.value:
-                    cookie_dict[c.name] = c.value
-        except Exception:
-            pass
-        # 也从 JSON body 中的 cookie_info 提取
-        for c in inner.get('cookie_info', {}).get('cookies', []):
-            cookie_dict[c['name']] = c['value']
-        token_info = inner.get('token_info', {})
-        if not token_info and inner.get('access_token'):
-            token_info = {'access_token': inner['access_token'], 'refresh_token': inner.get('refresh_token', '')}
-        if not token_info and inner.get('refresh_token'):
-            token_info = {'access_token': '', 'refresh_token': inner['refresh_token']}
-        out = {
-            'cookie_info': {
-                'cookies': [{'name': k, 'value': v} for k, v in cookie_dict.items()],
-                'domains': inner.get('cookie_info', {}).get('domains', ['.bilibili.com', '.biliapi.net']),
-            },
-            'token_info': token_info,
-        }
-        if token_info.get('refresh_token'):
-            out['refresh_token'] = token_info['refresh_token']
-        _atomic_write_json(COOKIES, out)
-        BILI_LOGIN_STATE.pop(qkey, None)
-        return jsonify({'status': 'ok', 'message': '登录成功', 'user': cookie_dict.get('DedeUserID', '')})
-    if state == 86090:
-        return jsonify({'status': 'scanned', 'message': '已扫码，请在手机确认'})
-    if state == 86101:
         return jsonify({'status': 'pending', 'message': '等待扫码'})
-    if state == 86038:
-        BILI_LOGIN_STATE.pop(qkey, None)
-        return jsonify({'status': 'expired', 'message': '二维码已过期'})
-    return jsonify({'status': 'error', 'message': f"code={state} {inner.get('message', '')}"})
+    inner = data.get('data') or {}
+
+    # 从 CookieJar 提取 session cookies
+    cookie_dict = {}
+    for c in st['jar']:
+        if c.name and c.value:
+            cookie_dict[c.name] = c.value
+
+    token_info = {
+        'mid': inner.get('mid', ''),
+        'access_token': inner.get('access_token', ''),
+        'refresh_token': inner.get('refresh_token', ''),
+        'expires_in': inner.get('expires_in', 0),
+    }
+    out = {
+        'cookie_info': {
+            'cookies': [{'name': k, 'value': v} for k, v in cookie_dict.items()],
+            'domains': ['.bilibili.com', '.biliapi.net'],
+        },
+        'token_info': token_info,
+    }
+    if token_info.get('refresh_token'):
+        out['refresh_token'] = token_info['refresh_token']
+    _atomic_write_json(COOKIES, out)
+    BILI_LOGIN_STATE.pop(auth_code, None)
+    return jsonify({'status': 'ok', 'message': '登录成功', 'user': cookie_dict.get('DedeUserID', '')})
 
 
 @app.route('/api/yt-cookie', methods=['POST'])
