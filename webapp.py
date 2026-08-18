@@ -199,14 +199,20 @@ def _safe_remove(path):
         pass
 
 
-def _touch_task(task_id, status=None, progress=None, step=None):
+def _touch_task(task_id, status=None, progress=None, step=None, log=None):
     """更新任务字段并持久化"""
     with lock:
         t = tasks.get(task_id)
-        if not t: return
-        if status is not None: t['status'] = status
-        if progress is not None: t['progress'] = progress
-        if step is not None: t['step'] = step
+        if t is None:
+            return
+        if status is not None:
+            t['status'] = status
+        if progress is not None:
+            t['progress'] = progress
+        if step is not None:
+            t['step'] = step
+        if log is not None:
+            t.setdefault('logs', []).append(f"[{time.strftime('%H:%M:%S')}] {log}")
         save_tasks()
 
 
@@ -225,7 +231,7 @@ def run_task(task_id, url):
     task['status'] = 'running'
     task['started_at'] = started
     task['step'] = '准备中...'
-    log = lambda msg: task['logs'].append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+    log = lambda msg: _touch_task(task_id, log=msg)
     cfg = read_config()
     save_tasks()
 
@@ -491,11 +497,15 @@ def run_task(task_id, url):
             log("🔑 当前服务器 IP 被 YouTube 风控，需要有效的 YouTube cookies")
             log("💡 请用浏览器扩展（如 Get cookies.txt）导出已登录 YouTube 的 cookies 并上传")
         log(f"❌ 错误: {msg}")
+        with lock:
+            if _active > 0:
+                _active -= 1
 
     task['finished_at'] = time.time()
     task['duration'] = round(time.time() - started, 1)
     with lock:
-        _active -= 1
+        if _active > 0:
+            _active -= 1
         trim = list(tasks.keys())[-MAX_TASKS:]
         for k in list(tasks.keys()):
             if k not in trim and tasks[k].get('status') in ('done', 'error'):
