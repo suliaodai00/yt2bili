@@ -229,9 +229,6 @@ function renderAssistant() {
   $('assistantLine').textContent = line;
   $('assistantPercent').textContent = pct + '%';
   $('assistantProgressFill').style.width = pct + '%';
-  if (window.y2bLive2D && typeof window.y2bLive2D.setState === 'function') {
-    window.y2bLive2D.setState(state, line, pct);
-  }
 }
 
 /* ================= 任务列表 ================= */
