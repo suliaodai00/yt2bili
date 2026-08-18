@@ -1,44 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Y2B app icon">
   <defs>
-    <linearGradient id="bg" x1="84" y1="48" x2="428" y2="464" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#111827"/>
-      <stop offset="0.48" stop-color="#0b1220"/>
-      <stop offset="1" stop-color="#050816"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF87AC"/>
+      <stop offset="0.35" stop-color="#FB7299"/>
+      <stop offset="1" stop-color="#E14E7E"/>
     </linearGradient>
-    <linearGradient id="ring" x1="82" y1="72" x2="430" y2="442" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ff3b5f"/>
-      <stop offset="0.5" stop-color="#22d3ee"/>
-      <stop offset="1" stop-color="#818cf8"/>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="arrow" x1="148" y1="242" x2="362" y2="242" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ff3b5f"/>
-      <stop offset="1" stop-color="#22d3ee"/>
-    </linearGradient>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.36"/>
-    </filter>
-    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="8" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <clipPath id="clip"><rect width="512" height="512" rx="96"/></clipPath>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <rect x="24" y="24" width="464" height="464" rx="96" fill="none" stroke="url(#ring)" stroke-width="10" opacity="0.88"/>
-  <circle cx="136" cy="132" r="76" fill="#ff3b5f" opacity="0.16"/>
-  <circle cx="378" cy="382" r="96" fill="#22d3ee" opacity="0.12"/>
-  <g filter="url(#softShadow)">
-    <path d="M118 184c0-23 18-42 42-42h70c23 0 42 19 42 42v52c0 23-19 42-42 42h-70c-24 0-42-19-42-42v-52Z" fill="#ff3b5f"/>
-    <path d="M190 181l52 30-52 30v-60Z" fill="#ffffff"/>
-    <path d="M278 236c0-24 19-43 43-43h31c24 0 43 19 43 43v66c0 24-19 43-43 43h-31c-24 0-43-19-43-43v-66Z" fill="#22d3ee"/>
-    <path d="M314 223l-19-30M360 223l19-30" stroke="#ffffff" stroke-width="15" stroke-linecap="round" opacity="0.92"/>
-    <circle cx="323" cy="267" r="10" fill="#07111f"/>
-    <circle cx="350" cy="267" r="10" fill="#07111f"/>
-    <path d="M321 306h32" stroke="#07111f" stroke-width="13" stroke-linecap="round"/>
+  <g clip-path="url(#clip)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect y="0" width="512" height="240" fill="url(#shine)"/>
+    <path d="M196 188 L196 324 L312 256 Z" fill="#ffffff"/>
   </g>
-  <path d="M154 334h140c24 0 43-19 43-43v-4" fill="none" stroke="url(#arrow)" stroke-width="22" stroke-linecap="round" filter="url(#glow)"/>
-  <path d="M314 255l48 33-48 34v-67Z" fill="#22d3ee" filter="url(#glow)"/>
-  <text x="256" y="420" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="74" font-weight="800" letter-spacing="-2" fill="#f8fbff">Y2B</text>
 </svg>
