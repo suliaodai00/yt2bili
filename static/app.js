@@ -259,6 +259,7 @@ function taskCardsHtml() {
         </div>
         <div class="task-actions">
           <button class="mini-btn" onclick="toggleLog('${tid}')">${open ? '收起' : '日志'}</button>
+          <button class="mini-btn" onclick="exportLog('${tid}')" title="导出任务日志为 txt">导出</button>
           <button class="mini-btn" onclick="copyUrl('${tid}')" title="复制原链接">复制</button>
           ${canRetry ? `<button class="mini-btn retry" onclick="retryTask('${tid}')">重试</button>` : ''}
           ${hasFile && !t.files_deleted ? `<button class="mini-btn danger" onclick="deleteFiles('${tid}')">删文件</button>` : ''}
@@ -294,6 +295,27 @@ function copyUrl(tid) {
   (navigator.clipboard ? navigator.clipboard.writeText(t.url) : Promise.reject())
     .then(() => toast('已复制链接', 'ok'))
     .catch(() => toast('复制失败', 'err'));
+}
+
+function exportLog(tid) {
+  toast('正在导出...', 'ok');
+  fetch('/api/export-log?task_id=' + encodeURIComponent(tid))
+    .then(r => {
+      if (!r.ok) return r.json().then(d => { throw new Error(d.error || ('HTTP ' + r.status)); });
+      const cd = r.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^";]+)"?/);
+      const name = m ? m[1] : 'y2b_' + tid + '.txt';
+      return r.blob().then(blob => ({ blob, name }));
+    })
+    .then(({ blob, name }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast('日志已导出', 'ok');
+    })
+    .catch(e => toast('导出失败: ' + e.message, 'err'));
 }
 
 /* ================= 操作 ================= */

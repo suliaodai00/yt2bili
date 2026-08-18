@@ -5,7 +5,7 @@
 """
 import os, sys, json, time, subprocess, threading, re, shutil, urllib.request, io, base64, http.cookiejar
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, make_response
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
@@ -397,6 +397,40 @@ def start_task():
 def get_status():
     t = tasks.get(request.args.get('task_id', ''))
     return jsonify(t or {'error': 'not found'}), (404 if not t else 200)
+
+
+@app.route('/api/export-log')
+def api_export_log():
+    """导出单个任务完整日志为 .txt 附件"""
+    task_id = request.args.get('task_id', '')
+    t = tasks.get(task_id)
+    if not t:
+        return jsonify({'error': '任务不存在'}), 404
+    lines = []
+    lines.append('===== Y2B 任务日志导出 =====')
+    lines.append(f'任务ID: {task_id}')
+    lines.append(f'标题: {t.get("title", "")}')
+    lines.append(f'状态: {t.get("status", "")}')
+    lines.append(f'链接: {t.get("url", "")}')
+    if t.get('video_id'):
+        lines.append(f'视频ID: {t["video_id"]}')
+    if t.get('video_file'):
+        lines.append(f'视频文件: {t["video_file"]}')
+    if t.get('subtitle_count'):
+        lines.append(f'字幕数: {t["subtitle_count"]}')
+    if t.get('duration'):
+        lines.append(f'用时: {t["duration"]}s')
+    if t.get('created_at'):
+        lines.append(f'创建时间: {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t["created_at"]))}')
+    lines.append('')
+    lines.append('----- 日志 -----')
+    lines.extend(t.get('logs', []))
+    text = '\n'.join(lines) + '\n'
+    fname = f'y2b_{task_id}.txt'
+    resp = make_response(text)
+    resp.headers['Content-Type'] = 'text/plain; charset=utf-8'
+    resp.headers['Content-Disposition'] = f'attachment; filename="{fname}"'
+    return resp
 
 
 @app.route('/tasks')
