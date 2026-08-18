@@ -36,129 +36,184 @@
   </div>
 </header>
 
+<nav class="page-nav" id="pageNav">
+  <button class="page-tab active" data-page="monitor">系统监控</button>
+  <button class="page-tab" data-page="tasks">任务监控</button>
+  <button class="page-tab" data-page="profile">个人中心</button>
+</nav>
+
 <main class="container">
 
-  <section class="stats-grid">
-    <div class="stat-card c-total">
-      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></div>
-      <div class="stat-label">总任务</div><div class="stat-value" id="stTotal">0</div>
-    </div>
-    <div class="stat-card c-running">
-      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-      <div class="stat-label">进行中</div><div class="stat-value running" id="stRunning">0</div>
-    </div>
-    <div class="stat-card c-done">
-      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#34f5a1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
-      <div class="stat-label">成功</div><div class="stat-value ok" id="stDone">0</div>
-    </div>
-    <div class="stat-card c-error">
-      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6b81" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
-      <div class="stat-label">失败</div><div class="stat-value err" id="stError">0</div>
-    </div>
-    <div class="stat-card c-rate">
-      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ffc94d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-6M6 20V10M18 20V4"/></svg></div>
-      <div class="stat-label">成功率</div><div class="stat-value" id="stRate">0%</div>
-    </div>
-    <div class="stat-card c-subs">
-      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg></div>
-      <div class="stat-label">翻译字幕</div><div class="stat-value" id="stSubs">0</div>
-    </div>
-  </section>
-
-  <section class="assistant-stage" id="assistantStage" aria-label="任务助手">
-    <div class="assistant-copy">
-      <div class="assistant-kicker">Y2B 任务助手</div>
-      <div class="assistant-line" id="assistantLine">等待新的 YouTube 链接</div>
-      <div class="assistant-progress">
-        <div class="assistant-progress-head">
-          <span>整体任务进度</span>
-          <strong id="assistantPercent">0%</strong>
+  <!-- ============ 页面 1: 系统监控 ============ -->
+  <div class="page" id="page-monitor">
+    <section class="panel system-panel">
+      <div class="panel-head">
+        <h2>服务器监控</h2>
+        <span class="panel-hint" id="sysHint">采集间隔 5s</span>
+      </div>
+      <div class="sys-grid">
+        <div class="gauge-card">
+          <div class="gauge-label">CPU 使用率</div>
+          <div class="gauge-num" id="cpuNum">--</div>
+          <svg id="cpuChart" class="sparkline" viewBox="0 0 200 40" preserveAspectRatio="none"></svg>
         </div>
-        <div class="assistant-progress-track">
-          <div class="assistant-progress-fill" id="assistantProgressFill" style="width:0%"></div>
+        <div class="gauge-card">
+          <div class="gauge-label">内存</div>
+          <div class="gauge-num" id="memNum">--</div>
+          <div class="bar"><div class="bar-fill" id="memBar" style="width:0%"></div></div>
+          <div class="bar-caption" id="memDetail">--</div>
+        </div>
+        <div class="gauge-card">
+          <div class="gauge-label">磁盘 (下载目录)</div>
+          <div class="gauge-num" id="diskNum">--</div>
+          <div class="bar"><div class="bar-fill disk" id="diskBar" style="width:0%"></div></div>
+          <div class="bar-caption" id="diskDetail">--</div>
+        </div>
+        <div class="gauge-card">
+          <div class="gauge-label">系统负载 (1/5/15m)</div>
+          <div class="gauge-num small" id="loadNum">--</div>
+          <div class="bar-caption" id="uptimeTxt">--</div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 
-  <section class="panel system-panel">
-    <div class="panel-head">
-      <h2>服务器监控</h2>
-      <span class="panel-hint" id="sysHint">采集间隔 5s</span>
-    </div>
-    <div class="sys-grid">
-      <div class="gauge-card">
-        <div class="gauge-label">CPU 使用率</div>
-        <div class="gauge-num" id="cpuNum">--</div>
-        <svg id="cpuChart" class="sparkline" viewBox="0 0 200 40" preserveAspectRatio="none"></svg>
+  <!-- ============ 页面 2: 任务监控 ============ -->
+  <div class="page" id="page-tasks" style="display:none">
+    <section class="panel submit-panel">
+      <div class="panel-head">
+        <h2>提交任务</h2>
       </div>
-      <div class="gauge-card">
-        <div class="gauge-label">内存</div>
-        <div class="gauge-num" id="memNum">--</div>
-        <div class="bar"><div class="bar-fill" id="memBar" style="width:0%"></div></div>
-        <div class="bar-caption" id="memDetail">--</div>
+      <div class="input-group">
+        <input id="urlInput" type="text" placeholder="粘贴 YouTube 链接, 回车开始..." autocomplete="off">
+        <button id="startBtn" onclick="submitTask()">开始</button>
       </div>
-      <div class="gauge-card">
-        <div class="gauge-label">磁盘 (下载目录)</div>
-        <div class="gauge-num" id="diskNum">--</div>
-        <div class="bar"><div class="bar-fill disk" id="diskBar" style="width:0%"></div></div>
-        <div class="bar-caption" id="diskDetail">--</div>
-      </div>
-      <div class="gauge-card">
-        <div class="gauge-label">系统负载 (1/5/15m)</div>
-        <div class="gauge-num small" id="loadNum">--</div>
-        <div class="bar-caption" id="uptimeTxt">--</div>
-      </div>
-    </div>
-  </section>
+      <p class="flow">
+        <span class="step">下载视频+英文字幕</span><span class="arr">→</span>
+        <span class="step">本地 Ollama 双语翻译</span><span class="arr">→</span>
+        <span class="step">烧录字幕</span><span class="arr">→</span>
+        <span class="step">上传 Bilibili</span>
+      </p>
+    </section>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Cookie 配置</h2>
-      <span class="panel-hint" id="cookieHint">登录 cookie 文件放置位置</span>
-    </div>
-    <div class="cookie-grid" id="cookieGrid">
-      <div class="cookie-card" id="cookie-youtube">
-        <div class="cookie-label">YouTube cookie</div>
-        <div class="cookie-path">--</div>
-        <div class="cookie-status">检测中...</div>
-        <div class="cookie-actions">
-          <button class="cookie-btn" onclick="uploadYtCookie()">上传 cookie 文件</button>
-          <span class="cookie-tip">用浏览器扩展导出 Netscape 格式后上传</span>
+    <section class="assistant-stage" id="assistantStage" aria-label="任务助手">
+      <div class="assistant-copy">
+        <div class="assistant-kicker">Y2B 任务助手</div>
+        <div class="assistant-line" id="assistantLine">等待新的 YouTube 链接</div>
+        <div class="assistant-progress">
+          <div class="assistant-progress-head">
+            <span>整体任务进度</span>
+            <strong id="assistantPercent">0%</strong>
+          </div>
+          <div class="assistant-progress-track">
+            <div class="assistant-progress-fill" id="assistantProgressFill" style="width:0%"></div>
+          </div>
         </div>
       </div>
-      <div class="cookie-card" id="cookie-bilibili">
-        <div class="cookie-label">Bilibili cookie</div>
-        <div class="cookie-path">--</div>
-        <div class="cookie-status">检测中...</div>
-        <div class="cookie-actions">
-          <button class="cookie-btn primary" onclick="startBiliLogin()">扫码登录</button>
-          <span class="cookie-tip">自动保存 cookies.json，扫码即可</span>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>任务列表</h2>
+        <div class="list-tools">
+          <div class="tabs" id="tabBar">
+            <span class="tab active" data-f="all">全部</span>
+            <span class="tab" data-f="running">进行中</span>
+            <span class="tab" data-f="done">成功</span>
+            <span class="tab" data-f="error">失败</span>
+          </div>
+          <button class="btn-ghost" onclick="clearDone()">清空已完成</button>
         </div>
       </div>
-    </div>
-  </section>
+      <div id="taskList"></div>
+      <div id="emptyState" class="empty">暂无任务，输入 YouTube 链接开始吧</div>
+    </section>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>下载代理</h2>
-      <span class="panel-hint">数据中心 IP 被 YouTube 风控时，可切换代理下载</span>
-    </div>
-    <div class="proxy-row">
-      <div class="proxy-switch">
-        <label class="switch">
-          <input type="checkbox" id="proxyToggle">
-          <span class="slider"></span>
-        </label>
-        <span class="proxy-switch-label" id="proxyToggleLabel">代理：关闭</span>
+    <section class="stats-grid page-tasks-stats">
+      <div class="stat-card c-total">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></div>
+        <div class="stat-label">总任务</div><div class="stat-value" id="stTotal">0</div>
       </div>
-      <div class="proxy-input-wrap">
-        <input id="proxyInput" type="text" placeholder="http://127.0.0.1:1080 或 socks5://..." autocomplete="off" disabled>
-        <button class="cookie-btn primary" onclick="saveProxy()">保存代理</button>
+      <div class="stat-card c-running">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+        <div class="stat-label">进行中</div><div class="stat-value running" id="stRunning">0</div>
       </div>
-      <div class="proxy-status" id="proxyStatus">检测中...</div>
-    </div>
-  </section>
+      <div class="stat-card c-done">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#34f5a1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+        <div class="stat-label">成功</div><div class="stat-value ok" id="stDone">0</div>
+      </div>
+      <div class="stat-card c-error">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6b81" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
+        <div class="stat-label">失败</div><div class="stat-value err" id="stError">0</div>
+      </div>
+      <div class="stat-card c-rate">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ffc94d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-6M6 20V10M18 20V4"/></svg></div>
+        <div class="stat-label">成功率</div><div class="stat-value" id="stRate">0%</div>
+      </div>
+      <div class="stat-card c-subs">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg></div>
+        <div class="stat-label">翻译字幕</div><div class="stat-value" id="stSubs">0</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 页面 3: 个人中心 ============ -->
+  <div class="page" id="page-profile" style="display:none">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>个人中心</h2>
+        <span class="panel-hint" id="cookieHint">账号登录与下载网络配置</span>
+      </div>
+      <div class="profile-section">
+        <div class="profile-sub">
+          <div class="profile-sub-head">
+            <span class="profile-sub-title">Cookie 配置</span>
+            <span class="profile-sub-hint">登录 cookie 文件放置位置</span>
+          </div>
+          <div class="cookie-grid" id="cookieGrid">
+            <div class="cookie-card" id="cookie-youtube">
+              <div class="cookie-label">YouTube cookie</div>
+              <div class="cookie-path">--</div>
+              <div class="cookie-status">检测中...</div>
+              <div class="cookie-actions">
+                <button class="cookie-btn" onclick="uploadYtCookie()">上传 cookie 文件</button>
+                <span class="cookie-tip">用浏览器扩展导出 Netscape 格式后上传</span>
+              </div>
+            </div>
+            <div class="cookie-card" id="cookie-bilibili">
+              <div class="cookie-label">Bilibili cookie</div>
+              <div class="cookie-path">--</div>
+              <div class="cookie-status">检测中...</div>
+              <div class="cookie-actions">
+                <button class="cookie-btn primary" onclick="startBiliLogin()">扫码登录</button>
+                <span class="cookie-tip">自动保存 cookies.json，扫码即可</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="profile-sub">
+          <div class="profile-sub-head">
+            <span class="profile-sub-title">下载代理</span>
+            <span class="profile-sub-hint">数据中心 IP 被 YouTube 风控时，可切换代理下载</span>
+          </div>
+          <div class="proxy-row">
+            <div class="proxy-switch">
+              <label class="switch">
+                <input type="checkbox" id="proxyToggle">
+                <span class="slider"></span>
+              </label>
+              <span class="proxy-switch-label" id="proxyToggleLabel">代理：关闭</span>
+            </div>
+            <div class="proxy-input-wrap">
+              <input id="proxyInput" type="text" placeholder="http://127.0.0.1:1080 或 socks5://..." autocomplete="off" disabled>
+              <button class="cookie-btn primary" onclick="saveProxy()">保存代理</button>
+            </div>
+            <div class="proxy-status" id="proxyStatus">检测中...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
 
   <!-- Bilibili 扫码登录模态框 -->
   <div id="biliModal" class="modal-mask" style="display:none">
@@ -180,39 +235,6 @@
   </div>
 
   <input type="file" id="ytCookieFile" accept=".txt,.cookies,text/plain" style="display:none">
-
-  <section class="panel">
-    <div class="panel-head">
-      <h2>提交任务</h2>
-    </div>
-    <div class="input-group">
-      <input id="urlInput" type="text" placeholder="粘贴 YouTube 链接, 回车开始..." autocomplete="off">
-      <button id="startBtn" onclick="submitTask()">开始</button>
-    </div>
-    <p class="flow">
-      <span class="step">下载视频+英文字幕</span><span class="arr">→</span>
-      <span class="step">本地 Ollama 双语翻译</span><span class="arr">→</span>
-      <span class="step">烧录字幕</span><span class="arr">→</span>
-      <span class="step">上传 Bilibili</span>
-    </p>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head">
-      <h2>任务列表</h2>
-      <div class="list-tools">
-        <div class="tabs" id="tabBar">
-          <span class="tab active" data-f="all">全部</span>
-          <span class="tab" data-f="running">进行中</span>
-          <span class="tab" data-f="done">成功</span>
-          <span class="tab" data-f="error">失败</span>
-        </div>
-        <button class="btn-ghost" onclick="clearDone()">清空已完成</button>
-      </div>
-    </div>
-    <div id="taskList"></div>
-    <div id="emptyState" class="empty">暂无任务，输入 YouTube 链接开始吧</div>
-  </section>
 
 </main>
 

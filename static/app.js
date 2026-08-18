@@ -247,10 +247,10 @@ function renderAssistant() {
     pct = Math.round(totalProgress / tasks.length);
     if (running.length) {
       const active = running.sort((a, b) => (b.created_at || 0) - (a.created_at || 0))[0];
-      const activePct = Math.round(Number(active.progress || 0));
+      const activePct = Number(active.progress || 0);
       pct = activePct;
       state = 'running';
-      line = (active.step || '任务处理中') + ' · ' + activePct + '%';
+      line = (active.step || '任务处理中') + ' · ' + activePct.toFixed(1) + '%';
     } else if (errors.length) {
       state = 'error';
       line = '有任务失败，点开日志查看原因';
@@ -267,8 +267,8 @@ function renderAssistant() {
   stage.classList.remove('state-empty', 'state-running', 'state-done', 'state-error');
   stage.classList.add('state-' + state);
   $('assistantLine').textContent = line;
-  $('assistantPercent').textContent = pct + '%';
-  $('assistantProgressFill').style.width = pct + '%';
+  $('assistantPercent').textContent = Number(pct).toFixed(1) + '%';
+  $('assistantProgressFill').style.width = Number(pct).toFixed(1) + '%';
 }
 
 /* ================= 任务列表 ================= */
@@ -305,9 +305,9 @@ function taskCardsHtml() {
           ${hasFile && !t.files_deleted ? `<button class="mini-btn danger" onclick="deleteFiles('${tid}')">删文件</button>` : ''}
         </div>
       </div>
-      <div class="task-progress"><div class="task-fill${st === 'error' ? ' err' : ''}" style="width:${t.progress ?? 0}%"></div></div>
+      <div class="task-progress"><div class="task-fill${st === 'error' ? ' err' : ''}" style="width:${Number(t.progress || 0).toFixed(1)}%"></div></div>
       <div class="task-foot">
-        <span class="task-step">${esc(t.step || '')}</span>
+        <span class="task-step">${esc(t.step || '')}${(t.status === 'running' || t.status === 'queued') ? ' · ' + Number(t.progress || 0).toFixed(1) + '%' : ''}</span>
         ${t.video_id ? '<span class="task-meta">' + esc(t.video_id) + '</span>' : ''}
       </div>
       ${logHtml}
@@ -318,7 +318,25 @@ function taskCardsHtml() {
 }
 
 function renderTasks() {
+  const scrolls = {};
+  Object.keys(openLogs).forEach(id => {
+    if (openLogs[id]) {
+      const el = document.getElementById('log' + id);
+      if (el) {
+        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+        scrolls[id] = { top: el.scrollTop, atBottom };
+      }
+    }
+  });
   $('taskList').innerHTML = taskCardsHtml();
+  Object.keys(scrolls).forEach(id => {
+    const el = document.getElementById('log' + id);
+    if (el) {
+      const s = scrolls[id];
+      if (s.atBottom) el.scrollTop = el.scrollHeight;
+      else el.scrollTop = s.top;
+    }
+  });
   renderAssistant();
 }
 
@@ -440,6 +458,16 @@ function tick() {
 
 /* ================= 事件 ================= */
 $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') submitTask(); });
+
+/* 页面切换 */
+$('pageNav').addEventListener('click', e => {
+  const tab = e.target.closest('.page-tab');
+  if (!tab) return;
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  const page = tab.dataset.page;
+  document.querySelectorAll('.page').forEach(p => { p.style.display = p.id === 'page-' + page ? '' : 'none'; });
+});
 
 $('proxyToggle').addEventListener('change', e => {
   const enabled = e.target.checked;

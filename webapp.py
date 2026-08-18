@@ -96,6 +96,89 @@ def run_cmd_with_cookies_fallback(cmd_list, ck_opt, timeout=300, log_func=None):
         return run_cmd(cmd_list, timeout=timeout, log_func=log_func)
 
 
+def run_cmd_stream(cmd_list, timeout=300, log_func=None, progress_cb=None):
+    """流式执行命令并逐行回调。stdout+stderr 合并，按 \\n 或 \\r 切行实时输出。
+
+    progress_cb(line) 返回 True 表示该行是进度行（不写入日志）。
+    """
+    env = dict(os.environ)
+    env['PYTHONUNBUFFERED'] = '1'
+    proc = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+    out = bytearray()
+    buf = b''
+    deadline = time.time() + timeout
+    try:
+        while True:
+            if time.time() > deadline:
+                proc.kill()
+                raise subprocess.TimeoutExpired(cmd_list, timeout)
+            chunk = proc.stdout.read1(65536)
+            if not chunk:
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.05)
+                continue
+            buf += chunk
+            while buf:
+                i = buf.find(b'\n')
+                j = buf.find(b'\r')
+                if i == -1:
+                    i = j
+                elif j != -1:
+                    i = min(i, j)
+                if i == -1:
+                    break
+                raw = buf[:i]
+                buf = buf[i + 1:]
+                line = raw.decode('utf-8', 'replace')
+                out += raw + b'\n'
+                if not line.strip():
+                    continue
+                is_prog = False
+                if progress_cb:
+                    try:
+                        is_prog = progress_cb(line)
+                    except Exception:
+                        is_prog = False
+                if log_func and not is_prog:
+                    log_func(line)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        raise
+    proc.wait()
+    if proc.returncode != 0:
+        err = bytes(out)[-500:].decode('utf-8', 'replace')
+        if log_func:
+            log_func(f"⚠️ {err}")
+        raise Exception(f"命令失败: {err}")
+    return bytes(out).decode('utf-8', 'replace')
+
+
+def run_cmd_with_cookies_fallback_stream(cmd_list, ck_opt, timeout=300, log_func=None, progress_cb=None):
+    """带 cookies 的流式版本；失败时自动去掉 cookies 重试一次"""
+    try:
+        return run_cmd_stream(cmd_list + ck_opt, timeout=timeout, log_func=log_func, progress_cb=progress_cb)
+    except Exception:
+        if not ck_opt:
+            raise
+        if log_func:
+            log_func("⚠️ YouTube cookies 可能已失效，自动改用直连重试...")
+        return run_cmd_stream(cmd_list, timeout=timeout, log_func=log_func, progress_cb=progress_cb)
+
+
+def ffprobe_duration(path):
+    """返回视频时长（秒），失败返回 None"""
+    try:
+        r = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'json', path],
+            capture_output=True, text=True, timeout=30)
+        d = json.loads(r.stdout or '{}')
+        return float(d['format']['duration'])
+    except Exception:
+        return None
+
+
 def _touch_task(task_id, status=None, progress=None, step=None):
     """更新任务字段并持久化"""
     with lock:
@@ -157,13 +240,27 @@ def run_task(task_id, url):
         task['progress'] = 10
         log("⬇️ 下载视频和英文字幕...")
         t_dl = time.time()
-        run_cmd_with_cookies_fallback(
+        dl_state = {'last': 0.0}
+
+        def dl_cb(line):
+            m = re.search(r'\[download\]\s+([\d.]+)%', line)
+            if not m:
+                return False
+            pct = float(m.group(1))
+            if pct < dl_state['last'] - 1:      # 换文件了，进度重新开始
+                dl_state['last'] = 0.0
+            dl_state['last'] = max(dl_state['last'], pct)
+            task['progress'] = round(10 + dl_state['last'] / 100 * 20, 1)
+            task['step'] = f"下载视频与字幕 {dl_state['last']:.1f}%"
+            return True
+
+        run_cmd_with_cookies_fallback_stream(
             [YTBIN] + ejs_opt + client_opt + proxy_opt + [
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
             '--embed-subs', '--embed-thumbnail',
             '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
-            ck_opt, timeout=300, log_func=log)
+            ck_opt, timeout=300, log_func=log, progress_cb=dl_cb)
         task['duration_download'] = round(time.time() - t_dl, 1)
         log("✅ 下载完成")
         task['progress'] = 30
@@ -198,7 +295,22 @@ def run_task(task_id, url):
         task['subtitle_count'] = 0
         if en_sub:
             t_tr = time.time()
-            out = run_cmd([PYTHON, TRANSLATE_PY, en_sub, output_srt, CONFIG], timeout=3600, log_func=log)
+
+            def tr_cb(line):
+                m = re.search(r'\[(\d+)/(\d+)\]', line)
+                if not m:
+                    return False
+                try:
+                    cur, tot = int(m.group(1)), int(m.group(2))
+                    pct = cur / tot * 100 if tot else 0
+                except (ValueError, ZeroDivisionError):
+                    return False
+                task['progress'] = round(40 + pct / 100 * 30, 1)
+                task['step'] = f"翻译中 {pct:.1f}%"
+                return True
+
+            out = run_cmd_stream([PYTHON, TRANSLATE_PY, en_sub, output_srt, CONFIG],
+                                 timeout=3600, log_func=log, progress_cb=tr_cb)
             task['duration_translate'] = round(time.time() - t_tr, 1)
             m = re.search(r'完成:\s*(\d+)/(\d+)', out or '')
             if m:
@@ -217,11 +329,27 @@ def run_task(task_id, url):
         video_to_upload = video_file
         if output_srt and os.path.exists(output_srt):
             log("🎬 烧录字幕...")
-            burn_cmd = ['ffmpeg', '-y', '-i', video_file,
+            total_us = None
+            dur = ffprobe_duration(video_file)
+            if dur:
+                total_us = dur * 1e6
+            burn_cmd = ['ffmpeg', '-y', '-nostats', '-i', video_file,
                        '-vf', f"subtitles={output_srt}:force_style='FontName=DejaVu Sans,FontSize=18,MarginV=40'",
-                       '-c:a', 'copy', final_video]
+                       '-c:a', 'copy', '-progress', 'pipe:1', final_video]
+
+            def burn_cb(line):
+                m = re.search(r'out_time_us=(\d+)', line)
+                if not m:
+                    return False
+                if not total_us:
+                    return True
+                pct = min(100.0, int(m.group(1)) / total_us * 100)
+                task['progress'] = round(75 + pct / 100 * 10, 1)
+                task['step'] = f"烧录字幕 {pct:.1f}%"
+                return True
+
             try:
-                run_cmd(burn_cmd, timeout=600, log_func=log)
+                run_cmd_stream(burn_cmd, timeout=600, log_func=log, progress_cb=burn_cb)
                 if os.path.exists(final_video) and os.path.getsize(final_video) > 0:
                     log("✅ 烧录完成")
                     video_to_upload = final_video
@@ -237,14 +365,26 @@ def run_task(task_id, url):
         bili_title = f"{title[:40]} - 双语字幕"
         desc = f"原视频: {url}\n\nAI 双语字幕由本地模型 qwen2.5:7b 生成 (免费无限🚀)"
         t_up = time.time()
-        run_cmd([PYTHON, UPLOAD_PY,
+        up_state = {'last': 0.0}
+
+        def up_cb(line):
+            m = re.search(r'=>\s*([\d.]+)%', line)
+            if not m:
+                return False
+            pct = float(m.group(1))
+            up_state['last'] = max(up_state['last'], pct)
+            task['progress'] = round(90 + up_state['last'] / 100 * 10, 1)
+            task['step'] = f"上传 B 站 {up_state['last']:.1f}%"
+            return True
+
+        run_cmd_stream([PYTHON, UPLOAD_PY,
             '--video', video_to_upload,
             '--cookie', COOKIES,
             '--title', bili_title[:80],
             '--desc', desc[:1000],
             '--tid', '171',
             '--tags', 'AI,科技',
-            '--source', url], timeout=1800, log_func=log)
+            '--source', url], timeout=1800, log_func=log, progress_cb=up_cb)
         task['duration_upload'] = round(time.time() - t_up, 1)
         log("✅ 上传 B 站完成!")
         task['progress'] = 100

@@ -5,3 +5,5 @@ __pycache__/
 config.yaml
 cookies.json
 youtube_cookies.txt
+y2b_*.txt
+IMG_*.PNG
