@@ -247,12 +247,12 @@ def run_task(task_id, url):
         task['phase'] = '获取信息'
         vid = task.get('video_id', '')
         title = task.get('title', '')
+        proxy_opt = ['--proxy', cfg['proxy']] if cfg['proxy'] else []
+        ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
         if vid and title and title != '处理中...':
             log(f"♻️ 复用已有视频信息: {title}")
         else:
             log("📋 获取视频信息...")
-            proxy_opt = ['--proxy', cfg['proxy']] if cfg['proxy'] else []
-            ck_opt = cfg['youtube_cookies'].split() if cfg['youtube_cookies'] else []
             meta_out = run_cmd_with_cookies_fallback(
                 [YTBIN, '--print-json', '--skip-download'] + ejs_opt + client_opt + proxy_opt + [url],
                 ck_opt, timeout=30, log_func=log, fallback_client_opt=fallback_client)
@@ -296,7 +296,7 @@ def run_task(task_id, url):
 
             run_cmd_with_cookies_fallback_stream(
                 [YTBIN] + ejs_opt + client_opt + proxy_opt + [
-                '-f', 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio[ext=m4a]/best',
+                '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
                 '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
                 '--embed-subs', '--embed-thumbnail',
                 '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
