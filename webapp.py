@@ -64,7 +64,7 @@ def save_tasks():
 
 
 def read_config():
-    cfg = {'proxy': '', 'youtube_cookies': ''}
+    cfg = {'proxy': '', 'youtube_cookies': '', 'ollama_url': 'http://127.0.0.1:11434', 'ollama_model': 'qwen2.5:7b'}
     if os.path.exists(CONFIG):
         with open(CONFIG) as f:
             for line in f:
@@ -72,6 +72,14 @@ def read_config():
                     cfg['proxy'] = line.split(':', 1)[1].strip().strip('"')
     if os.path.exists(YOUTUBE_COOKIES):
         cfg['youtube_cookies'] = f'--cookies {YOUTUBE_COOKIES}'
+    try:
+        import yaml
+        raw = yaml.safe_load(open(CONFIG))
+        if isinstance(raw, dict):
+            cfg['ollama_url'] = raw.get('ollama_url', cfg['ollama_url'])
+            cfg['ollama_model'] = raw.get('ollama_model', cfg['ollama_model'])
+    except Exception:
+        pass
     return cfg
 
 
@@ -251,9 +259,14 @@ def run_task(task_id, url):
             info = json.loads(meta_out)
             vid = info['id']
             title = info['title']
-            task['title'] = title
             task['video_id'] = vid
             log(f"✅ 视频: {title}")
+            translated = ollama_translate_title(title, cfg['ollama_url'], cfg['ollama_model'])
+            if translated != title:
+                task['title'] = translated
+                log(f"🌐 标题翻译: {title} → {translated}")
+            else:
+                task['title'] = title
 
         # ===== 2. 下载（已有视频文件则跳过）=====
         task['phase'] = '下载'
@@ -291,6 +304,13 @@ def run_task(task_id, url):
             task['duration_download'] = round(time.time() - t_dl, 1)
             log("✅ 下载完成")
             task['progress'] = 30
+
+        # 列出字幕文件方便诊断
+        vtts = [f for f in os.listdir(DOWNLOAD_DIR) if f.startswith(vid) and f.endswith('.vtt')]
+        if vtts:
+            log(f"📄 字幕文件: {', '.join(vtts)}")
+        else:
+            log("⚠️ 未找到字幕文件（视频可能无英文字幕）")
 
         video_file = None
         for f in os.listdir(DOWNLOAD_DIR):
@@ -735,6 +755,20 @@ def _atomic_write_json(path, obj):
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(obj, f, ensure_ascii=False)
     os.replace(tmp, path)
+
+
+def ollama_translate_title(text, ollama_url, model):
+    try:
+        prompt = f"将以下英文视频标题翻译成中文，保持专业术语和专有名词不翻译，只返回翻译结果不要多余内容：\n\n{text}"
+        req = urllib.request.Request(
+            f'{ollama_url}/api/generate',
+            data=json.dumps({'model': model, 'prompt': prompt, 'stream': False, 'options': {'temperature': 0.1}}).encode(),
+            headers={'Content-Type': 'application/json'})
+        resp = json.loads(urllib.request.urlopen(req, timeout=30).read())
+        translated = resp.get('response', '').strip().strip('"').strip("'")
+        return translated if translated else text
+    except Exception:
+        return text
 
 
 def _bili_sign(params):
