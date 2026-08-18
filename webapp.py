@@ -283,7 +283,7 @@ def run_task(task_id, url):
 
             run_cmd_with_cookies_fallback_stream(
                 [YTBIN] + ejs_opt + client_opt + proxy_opt + [
-                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                '-f', 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio[ext=m4a]/best',
                 '--write-subs', '--write-auto-subs', '--sub-langs', 'en',
                 '--embed-subs', '--embed-thumbnail',
                 '-o', f'{DOWNLOAD_DIR}/%(id)s.%(ext)s', url],
@@ -294,7 +294,7 @@ def run_task(task_id, url):
 
         video_file = None
         for f in os.listdir(DOWNLOAD_DIR):
-            if f.startswith(vid) and f.endswith('.mp4'):
+            if f.startswith(vid) and (f.endswith('.mp4') or f.endswith('.webm')):
                 video_file = os.path.join(DOWNLOAD_DIR, f); break
         if not video_file:
             mp4s = [f for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.mp4')]
@@ -807,7 +807,8 @@ def bili_login_status():
     inner = data.get('data') or {}
 
     # 从响应体提取 cookie（B站 TV 登录的 cookie 在 JSON body 的 cookie_info 中，
-    # 不在 Set-Cookie 头，所以 CookieJar 提取为空）
+    # 不在 Set-Cookie 头，所以 CookieJar 提取始终为空）
+    # 参考 biliup 源码 login_by_password 方法确认此行为
     cookie_dict = {}
     for c in inner.get('cookie_info', {}).get('cookies', []):
         if c.get('name') and c.get('value'):
