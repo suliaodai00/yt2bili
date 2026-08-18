@@ -1,0 +1,7 @@
+.venv/
+output/
+__pycache__/
+*.pyc
+config.yaml
+cookies.json
+youtube_cookies.txt

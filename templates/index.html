@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>yt2bili 监控台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">▶</span>
+    <div>
+      <h1>yt2bili 监控台</h1>
+      <p class="sub">YouTube 下载 → 本地 Ollama 双语翻译 → Bilibili 一键上传</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span id="ollamaBadge" class="badge badge-off">Ollama 检测中</span>
+    <span id="clock" class="clock">--:--:--</span>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="stats-grid">
+    <div class="stat-card"><div class="stat-label">总任务</div><div class="stat-value" id="stTotal">0</div></div>
+    <div class="stat-card"><div class="stat-label">进行中</div><div class="stat-value running" id="stRunning">0</div></div>
+    <div class="stat-card"><div class="stat-label">成功</div><div class="stat-value ok" id="stDone">0</div></div>
+    <div class="stat-card"><div class="stat-label">失败</div><div class="stat-value err" id="stError">0</div></div>
+    <div class="stat-card"><div class="stat-label">成功率</div><div class="stat-value" id="stRate">0%</div></div>
+    <div class="stat-card"><div class="stat-label">翻译字幕</div><div class="stat-value" id="stSubs">0</div></div>
+  </section>
+
+  <section class="panel system-panel">
+    <div class="panel-head">
+      <h2>服务器监控</h2>
+      <span class="panel-hint" id="sysHint">采集间隔 5s</span>
+    </div>
+    <div class="sys-grid">
+      <div class="gauge-card">
+        <div class="gauge-label">CPU 使用率</div>
+        <div class="gauge-num" id="cpuNum">--</div>
+        <svg id="cpuChart" class="sparkline" viewBox="0 0 200 40" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-label">内存</div>
+        <div class="gauge-num" id="memNum">--</div>
+        <div class="bar"><div class="bar-fill" id="memBar" style="width:0%"></div></div>
+        <div class="bar-caption" id="memDetail">--</div>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-label">磁盘 (下载目录)</div>
+        <div class="gauge-num" id="diskNum">--</div>
+        <div class="bar"><div class="bar-fill disk" id="diskBar" style="width:0%"></div></div>
+        <div class="bar-caption" id="diskDetail">--</div>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-label">系统负载 (1/5/15m)</div>
+        <div class="gauge-num small" id="loadNum">--</div>
+        <div class="bar-caption" id="uptimeTxt">--</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Cookie 配置</h2>
+      <span class="panel-hint" id="cookieHint">登录 cookie 文件放置位置</span>
+    </div>
+    <div class="cookie-grid" id="cookieGrid">
+      <div class="cookie-card" id="cookie-youtube">
+        <div class="cookie-label">YouTube cookie</div>
+        <div class="cookie-path">--</div>
+        <div class="cookie-status">检测中...</div>
+        <div class="cookie-actions">
+          <button class="cookie-btn" onclick="uploadYtCookie()">上传 cookie 文件</button>
+          <span class="cookie-tip">用浏览器扩展导出 Netscape 格式后上传</span>
+        </div>
+      </div>
+      <div class="cookie-card" id="cookie-bilibili">
+        <div class="cookie-label">Bilibili cookie</div>
+        <div class="cookie-path">--</div>
+        <div class="cookie-status">检测中...</div>
+        <div class="cookie-actions">
+          <button class="cookie-btn primary" onclick="startBiliLogin()">扫码登录</button>
+          <span class="cookie-tip">自动保存 cookies.json，扫码即可</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bilibili 扫码登录模态框 -->
+  <div id="biliModal" class="modal-mask" style="display:none">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Bilibili 扫码登录</h3>
+        <span class="modal-close" onclick="closeBiliLogin()">×</span>
+      </div>
+      <div class="modal-body">
+        <img id="biliQr" alt="二维码" class="bili-qr" style="display:none">
+        <p id="biliStatus" class="bili-status">生成二维码中...</p>
+        <p class="bili-hint">打开手机 Bilibili App，扫一扫后确认登录，Cookie 将自动保存到服务器</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-ghost" onclick="refreshBiliQr()">刷新二维码</button>
+        <button class="mini-btn" onclick="closeBiliLogin()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="ytCookieFile" accept=".txt,.cookies,text/plain" style="display:none">
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>提交任务</h2>
+    </div>
+    <div class="input-group">
+      <input id="urlInput" type="text" placeholder="粘贴 YouTube 链接, 回车开始..." autocomplete="off">
+      <button id="startBtn" onclick="submitTask()">开始</button>
+    </div>
+    <p class="flow">下载视频+英文字幕 → 本地 Ollama 双语翻译 → 烧录字幕 → 上传 Bilibili</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>任务列表</h2>
+      <div class="list-tools">
+        <div class="tabs" id="tabBar">
+          <span class="tab active" data-f="all">全部</span>
+          <span class="tab" data-f="running">进行中</span>
+          <span class="tab" data-f="done">成功</span>
+          <span class="tab" data-f="error">失败</span>
+        </div>
+        <button class="btn-ghost" onclick="clearDone()">清空已完成</button>
+      </div>
+    </div>
+    <div id="taskList"></div>
+    <div id="emptyState" class="empty">暂无任务，输入 YouTube 链接开始吧</div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
