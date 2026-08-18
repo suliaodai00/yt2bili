@@ -78,7 +78,7 @@ def read_config():
 def run_cmd(cmd_list, timeout=300, log_func=None):
     proc = subprocess.run(cmd_list, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
-        err = proc.stderr[-500:] if proc.stderr else 'unknown error'
+        err = (proc.stderr or proc.stdout or 'unknown error')[-500:]
         if log_func: log_func(f"⚠️ {err}")
         raise Exception(f"命令失败: {err}")
     return proc.stdout
