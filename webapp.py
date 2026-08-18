@@ -806,10 +806,16 @@ def bili_login_status():
         return jsonify({'status': 'pending', 'message': '等待扫码'})
     inner = data.get('data') or {}
 
-    # 从 CookieJar 提取 session cookies
+    # 从响应体提取 cookie（B站 TV 登录的 cookie 在 JSON body 的 cookie_info 中，
+    # 不在 Set-Cookie 头，所以 CookieJar 提取为空）
     cookie_dict = {}
+    for c in inner.get('cookie_info', {}).get('cookies', []):
+        if c.get('name') and c.get('value'):
+            cookie_dict[c['name']] = c['value']
+
+    # 补充来自 CookieJar 的 cookie（部分旧版接口可能也通过 Set-Cookie 设置）
     for c in st['jar']:
-        if c.name and c.value:
+        if c.name and c.value and c.name not in cookie_dict:
             cookie_dict[c.name] = c.value
 
     if not cookie_dict:
