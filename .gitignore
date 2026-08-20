@@ -7,3 +7,6 @@ cookies.json
 youtube_cookies.txt
 y2b_*.txt
 IMG_*.PNG
+data/youtube-firefox/
+/tmp/tr.log
+/tmp/yt2bili_*

@@ -1,4 +1,4 @@
-# yt2bili 配置文件示例（推荐配置：8核/12G 内存提速方案）
+# yt2bili 配置文件示例
 # 使用方式：cp config.yaml.example config.yaml 后按需修改
 
 # ---- 翻译引擎 ----
@@ -8,28 +8,35 @@ translation_engine: ollama
 # Ollama 服务地址（本机默认）
 ollama_url: http://127.0.0.1:11434
 
-# 翻译模型：
-#   qwen2.5:7b  约5GB，8核CPU较慢
-#   qwen2.5:3b  约2GB，速度快约2.5~3倍，字幕翻译足够（推荐）
-ollama_model: qwen2.5:3b
+# 翻译模型
+ollama_model: qwen2.5:7b
 
-# 并发翻译路数（需 Ollama 服务端 OLLAMA_NUM_PARALLEL >= 此值才真正并行）
-# 8核/12G 配 qwen2.5:3b 建议 3；若仍用 7b 请保持 1（防内存溢出）
+# 并发翻译路数
 ollama_concurrency: 3
 
-# 每批字幕条数，CPU 机器建议 16
+# 每批字幕条数
 ollama_batch_size: 16
 
-# Gemini 备用引擎（不使用可留空）
+# Gemini 备用引擎
 gemini_api_key: ""
 gemini_model: gemini-2.5-flash
 
-# ---- 下载 ----
-# 数据中心 IP 常被 YouTube 风控（报 "Sign in to confirm you're not a bot"）。
-# 解决方式：VPS 上跑 `bash install_snell_proxy.sh <服务器> <端口> <psk> [版本]`
-# 把 snell 节点转成本地代理，然后这里填:
-proxy: ""
+# ---- YouTube 统一认证与下载策略 ----
+youtube:
+  client: mweb
+  browser: firefox
+  browser_profile: /opt/yt2bili/data/youtube-firefox
+  cookies_file: /opt/yt2bili/youtube_cookies.txt
+  pot_provider_url: http://127.0.0.1:4416
+  sleep_requests: 5
+  sleep_interval: 5
+  max_sleep_interval: 10
+  retries: 2
+
+# ---- 下载代理 (兼容旧格式) ----
+proxy: "http://127.0.0.1:1080"
 
 # ---- 上传 ----
 bilibili:
   tid: 171   # 默认分区：171=科技
+telegram_bot_token: ""

@@ -1,56 +1,55 @@
 #!/bin/bash
-# yt2bili 项目一键重建脚本
-# 用法: 在目标机器上解压 yt2bili_light.tar.gz 后运行此脚本
+# ============================================================
+# setup.sh — 安装 yt2bili 所需的全部系统依赖与 Python 环境
+# ============================================================
 set -euo pipefail
-cd "$(dirname "$0")"
 
-echo "=== yt2bili 项目重建 ==="
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VENV="$SCRIPT_DIR/.venv"
 
-# 1. 安装系统依赖
-echo "[1/5] 安装系统依赖..."
-apt-get update -qq && apt-get install -y -qq ffmpeg python3 python3-venv 2>/dev/null || apk add ffmpeg python3 py3-pip 2>/dev/null || true
+echo "=== 1. 安装系统依赖 (ffmpeg, firefox-esr, xvfb, x11vnc, novnc, websockify) ==="
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq && apt-get install -y -qq \
+  ffmpeg \
+  firefox-esr \
+  xvfb \
+  x11vnc \
+  novnc \
+  websockify \
+  sqlite3 \
+  curl \
+  python3-venv \
+  python3-pip > /dev/null 2>&1 || true
 
-# 2. 创建虚拟环境
-echo "[2/5] 创建 Python 虚拟环境..."
-python3 -m venv .venv
-
-# 3. 安装 pip 包
-echo "[3/5] 安装 Python 依赖..."
-.venv/bin/pip install -q --upgrade pip yt-dlp biliup pyyaml flask qrcode pillow
-
-# 4. 安装 Ollama (如需要)
-echo "[4/5] 安装 Ollama..."
-if ! command -v ollama &>/dev/null; then
-    curl -fsSL https://ollama.com/install.sh | sh
-    echo "等待 Ollama 启动..."
-    sleep 5
-    # 8核/12G 内存推荐 qwen2.5:3b：速度快约2.5~3倍，字幕翻译足够
-    ollama pull qwen2.5:3b
+echo "=== 2. 创建 Python 虚拟环境与安装包 ==="
+if [ ! -d "$VENV" ]; then
+  python3 -m venv "$VENV"
 fi
 
-# 开启 Ollama 并行推理（配合 translate.py 的 ollama_concurrency: 3）
-if command -v systemctl &>/dev/null; then
-    mkdir -p /etc/systemd/system/ollama.service.d
-    cat > /etc/systemd/system/ollama.service.d/override.conf <<'EOF'
-[Service]
-Environment=OLLAMA_NUM_PARALLEL=3
-EOF
-    systemctl daemon-reload
-    systemctl restart ollama 2>/dev/null || true
+"$VENV/bin/pip" install -q --upgrade pip
+"$VENV/bin/pip" install -q \
+  yt-dlp \
+  bgutil-ytdlp-pot-provider \
+  biliup \
+  faster-whisper \
+  pyyaml \
+  flask \
+  requests \
+  python-telegram-bot
+
+echo "=== 3. 部署 / 启动 PO Token Provider 容器 ==="
+if command -v docker >/dev/null 2>&1; then
+  docker pull -q brainicism/bgutil-ytdlp-pot-provider:latest 2>/dev/null || true
+  docker stop bgutil-pot-provider 2>/dev/null || true
+  docker rm bgutil-pot-provider 2>/dev/null || true
+  docker run -d \
+    --name bgutil-pot-provider \
+    --restart unless-stopped \
+    -p 127.0.0.1:4416:4416 \
+    brainicism/bgutil-ytdlp-pot-provider:latest 2>/dev/null || true
 fi
 
-# 5. 安装 Deno (解决 YouTube EJS 挑战)
-echo "[5/5] 安装 Deno..."
-if ! command -v deno &>/dev/null; then
-    curl -fsSL https://deno.land/install.sh | sh
-fi
+echo "=== 4. 初始化持久化目录 ==="
+mkdir -p "$SCRIPT_DIR/data/youtube-firefox" "$SCRIPT_DIR/output/downloads" "$SCRIPT_DIR/output/subtitles" "$SCRIPT_DIR/output/final"
 
-echo ""
-echo "===================="
-echo "✅ 重建完成！"
-echo ""
-echo "使用说明:"
-echo "  bash yt2bili.sh --url \"YouTube链接\"   # 命令行"
-echo "  python3 webapp.py 5000                 # 启动 Web 面板"
-echo "  然后访问 http://127.0.0.1:5000"
-echo "===================="
+echo "=== [✓] setup.sh 依赖安装完成！==="

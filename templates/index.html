@@ -1,278 +1,298 @@
+<!-- yt2bili Web 模板 index.html (增强 YouTube 认证与 PO Token 状态面板) -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>yt2bili 监控台</title>
-<meta name="application-name" content="Y2B">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Y2B">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#070b14">
-<link rel="manifest" href="/static/site.webmanifest">
-<link rel="icon" type="image/svg+xml" href="/static/icons/y2b-icon.svg">
-<link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
-<link rel="stylesheet" href="/static/style.css?v=3">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>yt2bili — YouTube 到 Bilibili 一键自动化工作流</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .yt-auth-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-left: 6px;
+    }
+    .badge-ok { background: rgba(76, 175, 80, 0.2); color: #4caf50; border: 1px solid #4caf50; }
+    .badge-warn { background: rgba(255, 152, 0, 0.2); color: #ff9800; border: 1px solid #ff9800; }
+    .badge-err { background: rgba(244, 67, 54, 0.2); color: #f44336; border: 1px solid #f44336; }
+  </style>
 </head>
 <body>
-
-<div class="bg-decor">
-  <div class="orb orb-1"></div>
-  <div class="orb orb-2"></div>
-  <div class="orb orb-3"></div>
-</div>
-
-<header class="topbar">
-  <div class="brand">
-    <span class="logo">▶</span>
-    <div>
-      <h1>yt2bili 监控台</h1>
-      <p class="sub">YouTube 下载 → 本地 Ollama 双语翻译 → Bilibili 一键上传</p>
-    </div>
-  </div>
-  <div class="topbar-right">
-    <span id="ollamaBadge" class="badge badge-off">Ollama 检测中</span>
-    <span id="clock" class="clock">--:--:--</span>
-  </div>
-</header>
-
-<nav class="page-nav" id="pageNav">
-  <button class="page-tab active" data-page="monitor">系统监控</button>
-  <button class="page-tab" data-page="tasks">任务监控</button>
-  <button class="page-tab" data-page="profile">个人中心</button>
-</nav>
-
-<main class="container">
-
-  <!-- ============ 页面 1: 系统监控 ============ -->
-  <div class="page" id="page-monitor">
-    <section class="panel system-panel">
-      <div class="panel-head">
-        <h2>服务器监控</h2>
-        <span class="panel-hint" id="sysHint">采集间隔 5s</span>
+  <div class="layout">
+    <!-- 头部 -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">⚡ yt2bili</span>
+        <span class="tag">AI 双语工作流</span>
       </div>
-      <div class="sys-grid">
-        <div class="gauge-card">
-          <div class="gauge-label">CPU 使用率</div>
-          <div class="gauge-num" id="cpuNum">--</div>
-          <svg id="cpuChart" class="sparkline" viewBox="0 0 200 40" preserveAspectRatio="none"></svg>
-        </div>
-        <div class="gauge-card">
-          <div class="gauge-label">内存</div>
-          <div class="gauge-num" id="memNum">--</div>
-          <div class="bar"><div class="bar-fill" id="memBar" style="width:0%"></div></div>
-          <div class="bar-caption" id="memDetail">--</div>
-        </div>
-        <div class="gauge-card">
-          <div class="gauge-label">磁盘 (下载目录)</div>
-          <div class="gauge-num" id="diskNum">--</div>
-          <div class="bar"><div class="bar-fill disk" id="diskBar" style="width:0%"></div></div>
-          <div class="bar-caption" id="diskDetail">--</div>
-        </div>
-        <div class="gauge-card">
-          <div class="gauge-label">系统负载 (1/5/15m)</div>
-          <div class="gauge-num small" id="loadNum">--</div>
-          <div class="bar-caption" id="uptimeTxt">--</div>
+      <div class="sys-metrics" id="sysMetrics">
+        <span class="metric-item">CPU: <b id="mCpu">--</b></span>
+        <span class="metric-item">内存: <b id="mMem">--</b></span>
+        <span class="metric-item">Ollama: <b id="mOllama">--</b></span>
+        <span class="metric-item">PO Token: <b id="mPot">--</b></span>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- 任务创建卡片 -->
+      <div class="card hero-card">
+        <div class="hero-title">YouTube 视频处理</div>
+        <p class="sub">输入 YouTube 链接，自动完成：下载视频/字幕 → 本地 Ollama 双语翻译 → 压制字幕 → B 站发布</p>
+        <div class="input-group">
+          <input id="urlInput" type="text" placeholder="粘贴 YouTube 视频链接 (例如: https://youtu.be/_onfQRKB1JY)..." autocomplete="off">
+          <button class="btn primary" onclick="submitTask()" id="submitBtn">开始处理</button>
         </div>
       </div>
-    </section>
-  </div>
 
-  <!-- ============ 页面 2: 任务监控 ============ -->
-  <div class="page" id="page-tasks" style="display:none">
-    <section class="panel submit-panel">
-      <div class="panel-head">
-        <h2>提交任务</h2>
-      </div>
-      <div class="input-group">
-        <input id="urlInput" type="text" placeholder="粘贴 YouTube 链接, 回车开始..." autocomplete="off">
-        <button id="startBtn" onclick="submitTask()">开始</button>
-      </div>
-      <p class="flow">
-        <span class="step">下载视频+英文字幕</span><span class="arr">→</span>
-        <span class="step">本地 Ollama 双语翻译</span><span class="arr">→</span>
-        <span class="step">烧录字幕</span><span class="arr">→</span>
-        <span class="step">上传 Bilibili</span>
-      </p>
-    </section>
-
-    <section class="assistant-stage" id="assistantStage" aria-label="任务助手">
-      <div class="assistant-copy">
-        <div class="assistant-kicker">Y2B 任务助手</div>
-        <div class="assistant-line" id="assistantLine">等待新的 YouTube 链接</div>
-        <div class="assistant-progress">
-          <div class="assistant-progress-head">
-            <span>整体任务进度</span>
-            <strong id="assistantPercent">0%</strong>
-          </div>
-          <div class="assistant-progress-track">
-            <div class="assistant-progress-fill" id="assistantProgressFill" style="width:0%"></div>
+      <!-- 任务列表 -->
+      <div class="card tasks-card">
+        <div class="card-head">
+          <span class="card-title">任务列表</span>
+          <div class="head-actions">
+            <button class="btn secondary sm" onclick="clearFinishedTasks()">清理完成任务</button>
+            <button class="btn secondary sm" onclick="refreshTasks()">刷新</button>
           </div>
         </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head">
-        <h2>任务列表</h2>
-        <div class="list-tools">
-          <div class="tabs" id="tabBar">
-            <span class="tab active" data-f="all">全部</span>
-            <span class="tab" data-f="running">进行中</span>
-            <span class="tab" data-f="done">成功</span>
-            <span class="tab" data-f="error">失败</span>
-          </div>
-          <button class="btn-ghost" onclick="clearDone()">清空已完成</button>
+        <div id="tasksList" class="tasks-list">
+          <div class="empty">暂无任务</div>
         </div>
       </div>
-      <div id="taskList"></div>
-      <div id="emptyState" class="empty">暂无任务，输入 YouTube 链接开始吧</div>
-    </section>
 
-    <section class="stats-grid page-tasks-stats">
-      <div class="stat-card c-total">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></div>
-        <div class="stat-label">总任务</div><div class="stat-value" id="stTotal">0</div>
-      </div>
-      <div class="stat-card c-running">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-        <div class="stat-label">进行中</div><div class="stat-value running" id="stRunning">0</div>
-      </div>
-      <div class="stat-card c-done">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#34f5a1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
-        <div class="stat-label">成功</div><div class="stat-value ok" id="stDone">0</div>
-      </div>
-      <div class="stat-card c-error">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6b81" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
-        <div class="stat-label">失败</div><div class="stat-value err" id="stError">0</div>
-      </div>
-      <div class="stat-card c-rate">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ffc94d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-6M6 20V10M18 20V4"/></svg></div>
-        <div class="stat-label">成功率</div><div class="stat-value" id="stRate">0%</div>
-      </div>
-      <div class="stat-card c-subs">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg></div>
-        <div class="stat-label">翻译字幕</div><div class="stat-value" id="stSubs">0</div>
-      </div>
-    </section>
-  </div>
+      <!-- YouTube 认证与配置卡片 -->
+      <div class="card settings-card">
+        <div class="card-head">
+          <span class="card-title">YouTube 认证与下载配置</span>
+          <div class="head-actions">
+            <button class="btn secondary sm" onclick="testYouTubeConnection()" id="testYtBtn">🔍 测试 YouTube 连通性</button>
+          </div>
+        </div>
 
-  <!-- ============ 页面 3: 个人中心 ============ -->
-  <div class="page" id="page-profile" style="display:none">
-    <section class="panel">
-      <div class="panel-head">
-        <h2>个人中心</h2>
-        <span class="panel-hint" id="cookieHint">账号登录与下载网络配置</span>
-      </div>
-      <div class="profile-section">
-        <div class="profile-sub">
+        <div class="cookie-grid">
+          <!-- PO Token Provider -->
+          <div class="cookie-card" id="card-pot">
+            <div class="cookie-label">PO Token 供给器 (公开视频方案)</div>
+            <div class="cookie-path" id="potUrl">http://127.0.0.1:4416</div>
+            <div class="cookie-status" id="potStatus">检测中...</div>
+            <div class="cookie-tip">运行中的容器：提供 mweb 自动化 PO Token，无需 Google 账号</div>
+          </div>
+
+          <!-- Firefox Profile -->
+          <div class="cookie-card" id="card-firefox">
+            <div class="cookie-label">Firefox 登录持久 Profile (认证后备)</div>
+            <div class="cookie-path">/opt/yt2bili/data/youtube-firefox</div>
+            <div class="cookie-status" id="ffStatus">检测中...</div>
+            <div class="cookie-tip">可通过 ./youtube_login.sh start 打开 noVNC 人工安全登录</div>
+          </div>
+
+          <!-- YouTube Cookie 文件 (兼容 Fallback) -->
+          <div class="cookie-card" id="card-ytcookie">
+            <div class="cookie-label">youtube_cookies.txt (兼容 Fallback)</div>
+            <div class="cookie-path">/opt/yt2bili/youtube_cookies.txt</div>
+            <div class="cookie-status" id="ytCookieStatus">检测中...</div>
+            <div class="cookie-actions">
+              <button class="cookie-btn" onclick="uploadYtCookie()">上传 Cookie 文件</button>
+            </div>
+            <div class="cookie-tip">作为 Firefox Profile 缺失时的备用兼容机制</div>
+          </div>
+
+          <!-- Bilibili Cookie -->
+          <div class="cookie-card" id="card-bilibili">
+            <div class="cookie-label">Bilibili 账号 Cookie</div>
+            <div class="cookie-path">/opt/yt2bili/cookies.json</div>
+            <div class="cookie-status" id="biliStatus">检测中...</div>
+            <div class="cookie-actions">
+              <button class="cookie-btn primary" onclick="startBiliLogin()">扫码登录</button>
+            </div>
+            <div class="cookie-tip">用于发布视频到 B 站</div>
+          </div>
+        </div>
+
+        <!-- 代理设置 -->
+        <div class="profile-sub" style="margin-top: 20px;">
           <div class="profile-sub-head">
-            <span class="profile-sub-title">Cookie 配置</span>
-            <span class="profile-sub-hint">登录 cookie 文件放置位置</span>
+            <span class="profile-sub-title">下载代理配置</span>
+            <span class="profile-sub-hint">如遇数据中心 IP 阻断，可配置 HTTP/SOCKS 代理</span>
           </div>
-          <div class="cookie-grid" id="cookieGrid">
-            <div class="cookie-card" id="cookie-youtube">
-              <div class="cookie-label">YouTube cookie</div>
-              <div class="cookie-path">--</div>
-              <div class="cookie-status">检测中...</div>
-              <div class="cookie-actions">
-                <button class="cookie-btn" onclick="uploadYtCookie()">上传 cookie 文件</button>
-                <span class="cookie-tip">用浏览器扩展导出 Netscape 格式后上传</span>
-              </div>
-            </div>
-            <div class="cookie-card" id="cookie-bilibili">
-              <div class="cookie-label">Bilibili cookie</div>
-              <div class="cookie-path">--</div>
-              <div class="cookie-status">检测中...</div>
-              <div class="cookie-actions">
-                <button class="cookie-btn primary" onclick="startBiliLogin()">扫码登录</button>
-                <span class="cookie-tip">自动保存 cookies.json，扫码即可</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="profile-sub">
-          <div class="profile-sub-head">
-            <span class="profile-sub-title">下载代理</span>
-            <span class="profile-sub-hint">数据中心 IP 被 YouTube 风控时，可切换代理下载</span>
-          </div>
-          <div class="proxy-row">
-            <div class="proxy-switch">
-              <label class="switch">
-                <input type="checkbox" id="proxyToggle">
-                <span class="slider"></span>
-              </label>
-              <span class="proxy-switch-label" id="proxyToggleLabel">代理：关闭</span>
-            </div>
-            <div class="proxy-input-wrap">
-              <input id="proxyInput" type="text" placeholder="http://127.0.0.1:1080 或 socks5://..." autocomplete="off" disabled>
-              <button class="cookie-btn primary" onclick="saveProxy()">保存代理</button>
-            </div>
-            <div class="proxy-status" id="proxyStatus">检测中...</div>
-          </div>
-        </div>
-        <div class="profile-sub">
-          <div class="profile-sub-head">
-            <span class="profile-sub-title">数据清理</span>
-            <span class="profile-sub-hint">清除本机已生成的视频、字幕与烧录成品（保留 cookie 与代理配置）</span>
-          </div>
-          <div class="clear-row">
-            <span class="clear-hint">释放磁盘空间，任务记录一并清空。此操作不可恢复。</span>
-            <button class="cookie-btn danger-clear" id="clearAllBtn" onclick="clearAllFiles()">清除全部生成文件</button>
-            <span class="clear-result" id="clearResult"></span>
-          </div>
-        </div>
-        <div class="profile-sub">
-          <div class="profile-sub-head">
-            <span class="profile-sub-title">Telegram 机器人</span>
-            <span class="profile-sub-hint">配置 Bot Token，私聊发送 YouTube 链接自动下载翻译上传</span>
-          </div>
-          <div class="telegram-setup">
-            <div class="proxy-row">
-              <div class="proxy-input-wrap" style="flex:1">
-                <input id="tgTokenInput" type="text" placeholder="输入 Bot Token: 123456:ABC-DEF..." autocomplete="off">
-                <span class="tg-status" id="tgStatus" style="font-size:12.5px;color:var(--dim);margin-top:4px;display:inline-block"></span>
-              </div>
-              <button class="cookie-btn primary" onclick="saveTgToken()" id="tgSaveBtn">保存 Token</button>
-            </div>
-            <div class="tg-hints" style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
-              <span class="proxy-status" id="tgBotStatus" style="font-size:12px">检测中...</span>
-              <span style="font-size:11.5px;color:var(--dim);line-height:1.5">
-                在 Telegram 搜索你的 bot → 发 <code>/start</code> 开始使用<br>
-                直接发 YouTube 链接即可自动下载→翻译→上传 B 站
-              </span>
-            </div>
+          <div class="proxy-input-wrap" style="display: flex; gap: 10px; margin-top: 8px;">
+            <input id="proxyInput" type="text" placeholder="http://127.0.0.1:1080 或 socks5://..." style="flex: 1; padding: 8px 12px; background: rgba(0,0,0,0.3); border: 1px solid #444; color: #fff; border-radius: 4px;">
+            <button class="btn primary sm" onclick="saveProxy()">保存代理</button>
           </div>
         </div>
       </div>
-    </section>
-  </div>
-
-  <!-- Bilibili 扫码登录模态框 -->
-  <div id="biliModal" class="modal-mask" style="display:none">
-    <div class="modal">
-      <div class="modal-head">
-        <h3>Bilibili 扫码登录</h3>
-        <span class="modal-close" onclick="closeBiliLogin()">×</span>
-      </div>
-      <div class="modal-body">
-        <img id="biliQr" alt="二维码" class="bili-qr" style="display:none">
-        <p id="biliStatus" class="bili-status">生成二维码中...</p>
-        <p class="bili-hint">打开手机 Bilibili App，扫一扫后确认登录，Cookie 将自动保存到服务器</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn-ghost" onclick="refreshBiliQr()">刷新二维码</button>
-        <button class="mini-btn" onclick="closeBiliLogin()">关闭</button>
-      </div>
-    </div>
+    </main>
   </div>
 
   <input type="file" id="ytCookieFile" accept=".txt,.cookies,text/plain" style="display:none">
 
-</main>
+  <script>
+    async function fetchSystemStatus() {
+      try {
+        const res = await fetch('/api/system-status');
+        const d = await res.json();
+        if (d.cpu) document.getElementById('mCpu').innerText = d.cpu.split(',')[0] || '正常';
+        if (d.memory) {
+          const used = Math.round((d.memory.total - d.memory.available) / 1024);
+          const total = Math.round(d.memory.total / 1024);
+          document.getElementById('mMem').innerText = `${used}M / ${total}M`;
+        }
+        if (d.ollama) {
+          document.getElementById('mOllama').innerText = d.ollama.online ? `🟢 在线 (${d.ollama.model})` : '⚪ 待机';
+        }
+        if (d.youtube) {
+          document.getElementById('mPot').innerText = d.youtube.pot_provider === 'online' ? '🟢 正常' : '🔴 离线';
+          document.getElementById('potStatus').innerHTML = d.youtube.pot_provider === 'online' 
+            ? '<span class="yt-auth-badge badge-ok">🟢 服务运行正常 (端口 4416)</span>' 
+            : '<span class="yt-auth-badge badge-err">🔴 离线 (请检查容器)</span>';
 
-<div id="toast" class="toast"></div>
+          document.getElementById('ffStatus').innerHTML = d.youtube.firefox_profile === 'exists' && d.youtube.firefox_cookie_count > 0
+            ? `<span class="yt-auth-badge badge-ok">🟢 Profile 有效 (含 ${d.youtube.firefox_cookie_count} 条 Cookie)</span>`
+            : '<span class="yt-auth-badge badge-warn">⚪ 未登录 / 无 Cookie</span>';
 
-<script src="/static/app.js?v=3"></script>
+          document.getElementById('ytCookieStatus').innerHTML = d.youtube.cookies_txt
+            ? '<span class="yt-auth-badge badge-ok">🟢 文件存在</span>'
+            : '<span class="yt-auth-badge badge-warn">⚪ 文件不存在</span>';
+        }
+      } catch(e) {}
+    }
+
+    async function loadCookiesStatus() {
+      try {
+        const res = await fetch('/api/cookies-status');
+        const d = await res.json();
+        if (d.bilibili) {
+          document.getElementById('biliStatus').innerHTML = d.bilibili.valid 
+            ? `<span class="yt-auth-badge badge-ok">🟢 ${d.bilibili.msg}</span>` 
+            : `<span class="yt-auth-badge badge-warn">⚪ ${d.bilibili.msg}</span>`;
+        }
+        if (d.proxy !== undefined) {
+          document.getElementById('proxyInput').value = d.proxy || '';
+        }
+      } catch(e) {}
+    }
+
+    async function testYouTubeConnection() {
+      const btn = document.getElementById('testYtBtn');
+      btn.disabled = true;
+      btn.innerText = '正在测试...';
+      try {
+        const res = await fetch('/api/test-youtube', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({url: 'https://www.youtube.com/watch?v=_onfQRKB1JY'})
+        });
+        const d = await res.json();
+        if (d.ok) {
+          alert(`✅ YouTube 连接测试成功！\n标题: ${d.title}\n认证策略: ${d.auth_mode}`);
+        } else {
+          alert(`❌ 测试失败 [${d.code}]:\n${d.message}\n${d.details || ''}`);
+        }
+      } catch(e) {
+        alert('测试请求异常: ' + e);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '🔍 测试 YouTube 连通性';
+      }
+    }
+
+    async function saveProxy() {
+      const p = document.getElementById('proxyInput').value.trim();
+      try {
+        const res = await fetch('/api/proxy', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({proxy: p})
+        });
+        const d = await res.json();
+        if (d.ok) alert('代理配置已保存');
+        else alert('保存失败: ' + d.error);
+      } catch(e) { alert('请求失败: ' + e); }
+    }
+
+    function uploadYtCookie() {
+      const inp = document.getElementById('ytCookieFile');
+      inp.onchange = async () => {
+        if (!inp.files || !inp.files[0]) return;
+        const fd = new FormData();
+        fd.append('file', inp.files[0]);
+        const res = await fetch('/api/upload-yt-cookie', { method: 'POST', body: fd });
+        const d = await res.json();
+        if (d.ok) {
+          alert('Cookie 上传成功！');
+          fetchSystemStatus();
+        } else {
+          alert('上传失败: ' + d.error);
+        }
+      };
+      inp.click();
+    }
+
+    async function refreshTasks() {
+      try {
+        const res = await fetch('/api/tasks');
+        const list = await res.json();
+        const el = document.getElementById('tasksList');
+        if (!list || list.length === 0) {
+          el.innerHTML = '<div class="empty">暂无任务</div>';
+          return;
+        }
+        el.innerHTML = list.map(t => `
+          <div class="task-item" id="task-${t.id}">
+            <div class="task-header">
+              <span class="task-title">${t.title || '正在获取信息...'}</span>
+              <span class="task-status ${t.status}">${t.status} (${t.progress}%)</span>
+            </div>
+            <div class="task-step">${t.step || ''}</div>
+            <div class="task-bar"><div class="task-prog" style="width: ${t.progress}%"></div></div>
+          </div>
+        `).join('');
+      } catch(e) {}
+    }
+
+    async function submitTask() {
+      const inp = document.getElementById('urlInput');
+      const url = inp.value.trim();
+      if (!url) return alert('请输入 YouTube 链接');
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/start', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({url})
+        });
+        const d = await res.json();
+        if (d.task_id) {
+          inp.value = '';
+          refreshTasks();
+        } else {
+          alert('创建失败: ' + (d.error || '未知错误'));
+        }
+      } catch(e) { alert('提交异常: ' + e); }
+      finally { btn.disabled = false; }
+    }
+
+    async function clearFinishedTasks() {
+      if (!confirm('确定清理已完成/已失败的任务记录？')) return;
+      await fetch('/api/clear-tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({only_finished: true})
+      });
+      refreshTasks();
+    }
+
+    function startBiliLogin() {
+      window.open('/login', '_blank');
+    }
+
+    setInterval(fetchSystemStatus, 4000);
+    setInterval(refreshTasks, 3000);
+    fetchSystemStatus();
+    loadCookiesStatus();
+    refreshTasks();
+  </script>
 </body>
 </html>
