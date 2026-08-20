@@ -51,7 +51,7 @@ DO_DL=true; DO_TR=true; DO_UP=true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url) URL="$2"; shift 2;;
-    --title) TITLE="$2"; shift 2;;
+    --title) TITLE="$2"; MANUAL_TITLE="$2"; shift 2;;
     --desc) DESC="$2"; shift 2;;
     --tid) TID="$2"; shift 2;;
     --tag) TAGS="$2"; shift 2;;
@@ -87,7 +87,40 @@ download(){
   [ -z "$TITLE" ] && TITLE="$y_title"
   [ -z "$DESC" ] && DESC="$y_desc"
 
-  info "视频: $TITLE (ID: $vid)"
+  info "视频原标题: $TITLE (ID: $vid)"
+
+  # 如果未手动指定标题，调用本地 Ollama 将英文标题翻译为中文
+  if [ -z "${MANUAL_TITLE:-}" ]; then
+    local trans_title
+    trans_title=$("$PYTHON" -c "
+import sys, os, urllib.request, json, yaml
+CONFIG = '$CONFIG'
+text = '''$TITLE'''
+url = 'http://127.0.0.1:11434'
+model = 'qwen2.5:7b'
+if os.path.exists(CONFIG):
+    try:
+        raw = yaml.safe_load(open(CONFIG, encoding='utf-8'))
+        if isinstance(raw, dict):
+            url = raw.get('ollama_url', url)
+            model = raw.get('ollama_model', model)
+    except Exception: pass
+prompt = f'将以下英文视频标题翻译成中文，保持专业术语和专有名词不翻译，只返回翻译结果不要多余内容：\n\n{text}'
+try:
+    req = urllib.request.Request(f'{url}/api/generate', data=json.dumps({'model': model, 'prompt': prompt, 'stream': False, 'options': {'temperature': 0.1, 'num_predict': 100}}).encode(), headers={'Content-Type': 'application/json'})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        resp = json.loads(r.read())
+        t = resp.get('response', '').strip().strip('\"').strip(\"'\")
+        if t: print(t)
+        else: print(text)
+except Exception: print(text)
+" 2>/dev/null || echo "$TITLE")
+
+    if [ -n "$trans_title" ] && [ "$trans_title" != "$TITLE" ]; then
+      info "🌐 标题已翻译为中文: $trans_title"
+      TITLE="$trans_title"
+    fi
+  fi
 
   # 统一下载
   local dl_json

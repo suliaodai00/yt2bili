@@ -202,6 +202,11 @@ def run_task(task_id, url):
         title = task.get('title', '')
         if vid and title and title != '处理中...':
             log(f"♻️ 复用已有视频信息: {title}")
+            if not re.search(r'[\u4e00-\u9fff]', title):
+                translated = ollama_translate_title(title, cfg['ollama_url'], cfg['ollama_model'])
+                if translated != title:
+                    task['title'] = translated
+                    log(f"🌐 标题已翻译为中文: {title} → {translated}")
         else:
             log("📋 正在获取视频元数据 (通过 youtube_downloader)...")
             try:
@@ -210,13 +215,13 @@ def run_task(task_id, url):
                 title = meta['title']
                 task['video_id'] = vid
                 task['title'] = title
-                log(f"✅ 视频标题: {title} (ID: {vid}, 认证模式: {meta.get('auth_mode_used', 'default')})")
+                log(f"✅ 视频原标题: {title} (ID: {vid}, 认证模式: {meta.get('auth_mode_used', 'default')})")
                 
                 # 标题翻译
                 translated = ollama_translate_title(title, cfg['ollama_url'], cfg['ollama_model'])
                 if translated != title:
                     task['title'] = translated
-                    log(f"🌐 标题翻译: {title} → {translated}")
+                    log(f"🌐 标题已翻译为中文: {title} → {translated}")
                 else:
                     task['title'] = title
             except YouTubeError as ye:
@@ -492,20 +497,29 @@ def run_task(task_id, url):
 
 
 def ollama_translate_title(text, ollama_url, model):
-    try:
-        prompt = f"将以下英文视频标题翻译成中文，保持专业术语和专有名词不翻译，只返回翻译结果不要多余内容：\n\n{text}"
-        req = urllib.request.Request(
-            f'{ollama_url}/api/generate',
-            data=json.dumps({"model": model, "prompt": prompt, "stream": False,
-                             "options": {"temperature": 0.1, "num_predict": 100}}).encode(),
-            headers={"Content-Type": "application/json"}
-        )
-        with urllib.request.urlopen(req, timeout=30) as r:
-            resp = json.loads(r.read())
-        translated = resp.get('response', '').strip().strip('"').strip("'")
-        return translated if translated else text
-    except Exception:
+    """用本地 Ollama 模型将标题翻译为自然中文，带重试与兜底"""
+    if not text or not any(c.isalpha() for c in text):
         return text
+    prompt = f"将以下英文视频标题翻译成中文，保持专业术语和专有名词（如模型名、软件名等）不翻译，只返回翻译后的中文标题，不要加任何解释或标点符号前后缀：\n\n{text}"
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(
+                f'{ollama_url}/api/generate',
+                data=json.dumps({"model": model, "prompt": prompt, "stream": False,
+                                 "options": {"temperature": 0.1, "num_predict": 120}}).encode(),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=45) as r:
+                resp = json.loads(r.read())
+            translated = resp.get('response', '').strip().strip('"').strip("'")
+            # 清理可能的 markdown 标记
+            translated = re.sub(r'^#+\s*', '', translated).strip()
+            if translated and translated != text:
+                return translated
+        except Exception as e:
+            print(f"[Title Translate] 尝试 {attempt+1}/3 失败: {e}")
+            time.sleep(2)
+    return text
 
 
 # ============================================================
