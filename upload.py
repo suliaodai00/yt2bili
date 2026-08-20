@@ -8,7 +8,7 @@ import sys, os, json, argparse
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--video', required=True)
-    ap.add_argument('--cookie', required=True)
+    ap.add_argument('--cookie', '--cookies', dest='cookie', required=True, help='B站 cookies.json 路径')
     ap.add_argument('--title', default='视频')
     ap.add_argument('--desc', default='')
     ap.add_argument('--tid', default='171')
@@ -23,7 +23,7 @@ def main():
     if not os.path.isfile(cookie):
         print(f"!! cookie文件不存在: {cookie}"); sys.exit(1)
 
-    # cookie 结构预检（对齐 biliup 期望的 cookie_info/token_info 格式）
+    # cookie 结构预检
     try:
         with open(cookie, encoding='utf-8') as f:
             ck = json.load(f)
@@ -36,9 +36,6 @@ def main():
     if not ck.get('cookie_info', {}).get('cookies'):
         print("!! cookies.json 中未找到 cookie 列表，请重新扫码登录后重试", file=sys.stderr); sys.exit(1)
 
-    # 找 bili_webup
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), '../.venv/lib/python3.11/site-packages'))
-    # 尝试找 venv 路径
     for base in [os.path.dirname(os.path.realpath(__file__)), os.getcwd()]:
         sp = os.path.join(base, '.venv/lib/python3.11/site-packages')
         if os.path.isdir(sp):
