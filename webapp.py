@@ -440,12 +440,22 @@ def run_task(task_id, url):
 
         # Telegram 通知 (成功)
         try:
+            total_time_str = f"{round(time.time() - task['created_at'], 1)}s"
+            bvid_link = f"https://www.bilibili.com/video/{bvid}" if bvid else "处理中"
             tg_msg = (
-                f"🎉 *yt2bili 任务完成！*\n\n"
-                f"🎬 *标题*: {task.get('title', '未知')}\n"
-                f"📺 *B站*: [{bvid}](https://www.bilibili.com/video/{bvid})\n"
-                f"⏱️ *总耗时*: {round(time.time() - task['created_at'], 1)}s\n"
-                f"📊 *明细*: 下载 {task.get('duration_download','-')}s | 翻译 {task.get('duration_translate','-')}s | 压制 {task.get('duration_burn','-')}s | 上传 {task.get('duration_upload','-')}s"
+                "🎉 *YouTube 视频发布成功！*\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"🎬 *视频标题*：\n*{task.get('title', '未知')}*\n\n"
+                f"📺 *B 站直达*：[点击观看 {bvid or ''}]({bvid_link})\n"
+                f"📝 *双语字幕*：`{task.get('subtitle_count', 0)}` 句已翻译\n"
+                f"⏱️ *总耗时*：`{total_time_str}`\n\n"
+                "📊 *各环节耗时明细*：\n"
+                f"• ⬇️ 视频下载：`{task.get('duration_download','-')}s`\n"
+                f"• 🌐 AI 翻译：`{task.get('duration_translate','-')}s`\n"
+                f"• 🎬 字幕压制：`{task.get('duration_burn','-')}s`\n"
+                f"• 🚀 B 站发布：`{task.get('duration_upload','-')}s`\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "✨ _由 yt2bili 全自动流水线处理_"
             )
             telegram_bot.send_notification(tg_msg)
         except Exception as te:
@@ -460,9 +470,13 @@ def run_task(task_id, url):
         # Telegram 通知 (失败)
         try:
             tg_err = (
-                f"❌ *yt2bili 任务失败*\n\n"
-                f"🎬 *标题*: {task.get('title', '处理中')}\n"
-                f"⚠️ *原因*: `{str(e)[:200]}`"
+                "❌ *yt2bili 任务处理失败*\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"🎬 *视频*：*{task.get('title', '处理中')}*\n"
+                f"🔗 *链接*：`{url}`\n"
+                f"⚠️ *失败原因*：\n`{str(e)[:300]}`\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "💡 _你可以尝试在 Web 端点击重试_"
             )
             telegram_bot.send_notification(tg_err)
         except Exception as te:
@@ -949,6 +963,5 @@ if __name__ == '__main__':
     load_tasks()
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     print(f"yt2bili Web 监控面板: http://127.0.0.1:{port}")
-    telegram_bot.set_start_task_callback(start_new_task)
     telegram_bot.run_bot()
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)

@@ -85,6 +85,12 @@ def send_notification(message):
         print(f"[Telegram] 发送通知异常: {e}")
         return False
 
+_start_task_callback = None
+
+def set_start_task_callback(cb):
+    global _start_task_callback
+    _start_task_callback = cb
+
 def run_bot():
     """启动独立 Telegram Bot 进程"""
     import subprocess
