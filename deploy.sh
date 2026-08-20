@@ -23,13 +23,15 @@ chmod +x "$SCRIPT_DIR/yt2bili.sh" \
          "$SCRIPT_DIR/translate.py" \
          "$SCRIPT_DIR/transcribe.py" \
          "$SCRIPT_DIR/upload.py" \
+         "$SCRIPT_DIR/telegram_bot_runner.py" \
          "$SCRIPT_DIR/deploy.sh" \
          "$SCRIPT_DIR/setup.sh"
 
 echo "=== 4. 重启 Web 与 Telegram Bot 服务 ==="
 pkill -f "webapp.py 5000" 2>/dev/null || true
-pkill -f "telegram_bot_runner" 2>/dev/null || true
+pkill -f "telegram_bot_runner.py" 2>/dev/null || true
 
 nohup "$SCRIPT_DIR/.venv/bin/python3" "$SCRIPT_DIR/webapp.py" 5000 > "$SCRIPT_DIR/output/webapp.log" 2>&1 &
+nohup "$SCRIPT_DIR/.venv/bin/python3" "$SCRIPT_DIR/telegram_bot_runner.py" > "$SCRIPT_DIR/output/telegram_bot.log" 2>&1 &
 
 echo "=== [✓] deploy.sh 部署完成！Web 端口: 5000 ==="

@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
-"""yt2bili Telegram Bot — 私聊发 YouTube 链接自动下载翻译上传"""
-import os, sys, json, time, threading, re, urllib.request, urllib.parse
+"""yt2bili Telegram Bot 辅助模块"""
+import os, sys, json, time, threading, urllib.request, urllib.parse
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE, 'output', 'tasks.json')
 CONFIG = os.path.join(BASE, 'config.yaml')
-
-# 用户白名单: None = 允许所有人
-ALLOWED_USERS = None
-
-_start_task_callback = None
-
-def set_start_task_callback(cb):
-    global _start_task_callback
-    _start_task_callback = cb
 
 def _read_config():
     cfg = {}
@@ -69,12 +60,12 @@ def _save_chat_id(chat_id):
     except Exception as e:
         print(f"[Telegram] 保存 chat_id 异常: {e}")
 
-# === 同步直接 HTTP 发送通知 (不依赖 asyncio 运行环境，最稳定) ===
 def send_notification(message):
+    """直接使用 HTTP 发送通知，不依赖 asyncio 事件循环"""
     token = _read_token()
     chat_id = _read_chat_id()
     if not token or not chat_id:
-        print(f"[Telegram] 未配置 token ({bool(token)}) 或 chat_id ({bool(chat_id)})，跳过通知")
+        print(f"[Telegram] 未配置 token 或 chat_id，跳过发送")
         return False
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -91,108 +82,31 @@ def send_notification(message):
             res = json.loads(r.read())
             return res.get("ok", False)
     except Exception as e:
-        print(f"[Telegram] HTTP 发送通知异常: {e}")
+        print(f"[Telegram] 发送通知异常: {e}")
         return False
 
-# === 启动 Bot 守护进程 ===
-def start_bot_sync():
+def run_bot():
+    """启动独立 Telegram Bot 进程"""
     import subprocess
     token = _read_token()
     if not token:
-        print("[Telegram] 未配置 token，跳过 bot 启动")
         return
-
-    bot_script = os.path.join(BASE, 'telegram_bot_runner.py')
-    with open(bot_script, 'w', encoding='utf-8') as f:
-        f.write(f'''#!/usr/bin/env python3
-import asyncio, sys, re, json, urllib.request
-sys.path.insert(0, "{BASE}")
-from telegram_bot import _read_token, _read_chat_id, _save_chat_id, DATA_FILE
-token = _read_token()
-if not token:
-    print("No token")
-    sys.exit(1)
-
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from telegram import Update
-
-async def cmd_start(update: Update, context):
-    chat_id = update.effective_chat.id
-    _save_chat_id(chat_id)
-    await update.message.reply_text(
-        "🤖 *yt2bili Bot 已就绪*\\n\\n"
-        "已将当前会话绑定为通知接收目标！\\n\\n"
-        "直接发送 YouTube 链接，自动执行：\\n"
-        "⬇️ 下载 → 🌐 双语翻译 → 🎬 压制 → 🚀 上传 B 站\\n\\n"
-        "命令：\\n"
-        "/status — 查看任务队列与统计",
-        parse_mode='Markdown'
-    )
-
-async def cmd_status(update: Update, context):
-    chat_id = update.effective_chat.id
-    _save_chat_id(chat_id)
     try:
-        with open("{DATA_FILE}", encoding='utf-8') as f:
-            tasks = json.load(f)
+        subprocess.run(['pkill', '-f', 'telegram_bot_runner.py'], capture_output=True)
     except Exception:
-        tasks = {{}}
-    running = sum(1 for t in tasks.values() if t.get('status') == 'running')
-    queued = sum(1 for t in tasks.values() if t.get('status') == 'queued')
-    done = sum(1 for t in tasks.values() if t.get('status') == 'done')
-    err = sum(1 for t in tasks.values() if t.get('status') == 'error')
-    await update.message.reply_text(
-        f"📊 *任务队列状态*\\n"
-        f"⏳ 排队: {{queued}} | 🏃 运行: {{running}}\\n"
-        f"✅ 成功: {{done}} | ❌ 失败: {{err}}",
-        parse_mode='Markdown'
-    )
+        pass
+    
+    bot_script = os.path.join(BASE, 'telegram_bot_runner.py')
+    py = os.path.join(BASE, '.venv', 'bin', 'python3')
+    if not os.path.exists(py):
+        py = sys.executable
 
-async def cmd_msg(update: Update, context):
-    text = update.message.text.strip()
-    chat_id = update.effective_chat.id
-    _save_chat_id(chat_id)
-    yt = r'(https?:\\/\\/(?:www\\.)?(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/)[\\w-]+)'
-    m = re.search(yt, text)
-    if not m:
-        await update.message.reply_text("❌ 请发送有效的 YouTube 视频链接")
-        return
-    url = m.group(1)
-    req = urllib.request.Request(
-        "http://127.0.0.1:5000/start",
-        data=json.dumps({{"url": url}}).encode('utf-8'),
-        headers={{"Content-Type": "application/json"}},
-        method='POST'
-    )
-    try:
-        resp = urllib.request.urlopen(req, timeout=10)
-        data = json.loads(resp.read())
-        tid = data.get('task_id', '')
-        await update.message.reply_text(
-            f"✅ *已成功创建任务*\\n"
-            f"🆔 `{tid}`\\n\\n"
-            f"🚀 已进入自动化工作流，全部完成时会在此通知你！",
-            parse_mode='Markdown'
+    log_path = os.path.join(BASE, 'output', 'telegram_bot.log')
+    with open(log_path, 'a') as log_file:
+        proc = subprocess.Popen(
+            [py, bot_script],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True
         )
-    except Exception as e:
-        await update.message.reply_text(f"❌ 任务创建失败: {{e}}")
-
-app = Application.builder().token(token).build()
-app.add_handler(CommandHandler("start", cmd_start))
-app.add_handler(CommandHandler("status", cmd_status))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, cmd_msg))
-print("[Telegram] Bot 启动成功，正在轮询...")
-app.run_polling(allowed_updates=Update.ALL_TYPES)
-''')
-
-    proc = subprocess.Popen(
-        [sys.executable, bot_script],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        start_new_session=True
-    )
-    print(f"[Telegram] Bot 进程已启动 (PID {proc.pid})")
-
-def run_bot():
-    t = threading.Thread(target=start_bot_sync, daemon=True)
-    t.start()
-    return t
+    print(f"[Telegram] Bot 服务已在后台拉起 (PID {proc.pid})")
