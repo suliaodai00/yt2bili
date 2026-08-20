@@ -180,6 +180,7 @@ def ffprobe_duration(path):
 def run_task(task_id, url):
     global _active
     task = tasks[task_id]
+    task['started_at'] = time.time()
 
     def log(msg):
         ts = time.strftime('%H:%M:%S')
@@ -194,8 +195,9 @@ def run_task(task_id, url):
     downloader = YouTubeDownloader(config_path=CONFIG)
 
     try:
-        # ===== 1. 获取视频信息（复用或从 downloader 提取）=====
+        # ===== 1. 获取视频信息 =====
         task['phase'] = '获取信息'
+        task['status'] = 'running'
         vid = task.get('video_id', '')
         title = task.get('title', '')
         if vid and title and title != '处理中...':
@@ -220,7 +222,7 @@ def run_task(task_id, url):
             except YouTubeError as ye:
                 raise Exception(f"获取视频信息失败: [{ye.code}] {ye.message}")
 
-        # ===== 2. 下载（已有视频文件则跳过）=====
+        # ===== 2. 下载 =====
         task['phase'] = '下载'
         video_file = task.get('video_file', '')
         if video_file and os.path.exists(video_file) and os.path.getsize(video_file) > 0:
@@ -230,7 +232,7 @@ def run_task(task_id, url):
         else:
             task['step'] = '下载视频与字幕'
             task['progress'] = 10
-            log("⬇️ 正在下载最高画质视频和英文字幕...")
+            log("⬇️ 正在下载视频和英文字幕...")
             t_dl = time.time()
 
             def dl_prog_cb(pdict):
@@ -265,7 +267,6 @@ def run_task(task_id, url):
             log("✅ 视频及字幕下载完成")
             task['progress'] = 30
 
-        # 列出英文字幕文件
         vtts = [f for f in os.listdir(DOWNLOAD_DIR) if f.startswith(vid) and f.endswith('.vtt')]
         if vtts:
             log(f"📄 字幕文件: {', '.join(vtts)}")
@@ -275,7 +276,7 @@ def run_task(task_id, url):
         task['video_file'] = video_file
         log(f"📁 视频: {os.path.basename(video_file)}")
 
-        # ===== 3. 翻译（已有双语字幕则跳过）=====
+        # ===== 3. 翻译 =====
         task['phase'] = '翻译'
         output_srt = os.path.join(SUBTITLE_DIR, f'{vid}_bilingual_full.srt')
         if os.path.exists(output_srt) and os.path.getsize(output_srt) > 0:
@@ -301,7 +302,6 @@ def run_task(task_id, url):
                 vtts = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.vtt')]
                 if vtts: en_sub = vtts[0]
 
-            # Whisper 语音识别后备: 无字幕时自动生成
             if not en_sub:
                 log("⚠️ 未找到字幕, 使用 Whisper 语音识别生成...")
                 whisper_srt = os.path.join(SUBTITLE_DIR, f'{vid}_whisper.srt')
@@ -349,7 +349,7 @@ def run_task(task_id, url):
                 output_srt = None
         task['progress'] = 70
 
-        # ===== 4. 压制字幕（已有成品视频则跳过）=====
+        # ===== 4. 压制字幕 =====
         task['phase'] = '压制'
         task['step'] = '压制字幕中'
         final_video = os.path.join(FINAL_DIR, f'{vid}_final_bilingual.mp4')
@@ -366,7 +366,6 @@ def run_task(task_id, url):
                         '-progress', 'pipe:1',
                         final_video]
 
-            # 获取视频总时长用于计算进度
             total_dur = ffprobe_duration(video_file)
 
             def burn_cb(line):
@@ -413,7 +412,6 @@ def run_task(task_id, url):
             task['step'] = f"上传中 {pct}%"
             return True
 
-        # 从原始简介提取或留空
         desc_text = f"原视频链接: {url}\n由 yt2bili 自动下载、AI双语翻译并上传。"
 
         up_out = run_cmd_stream([
@@ -456,7 +454,6 @@ def run_task(task_id, url):
 
 
 def ollama_translate_title(text, ollama_url, model):
-    """用本地 Ollama 模型将标题翻译为自然中文"""
     try:
         prompt = f"将以下英文视频标题翻译成中文，保持专业术语和专有名词不翻译，只返回翻译结果不要多余内容：\n\n{text}"
         req = urllib.request.Request(
@@ -473,42 +470,103 @@ def ollama_translate_title(text, ollama_url, model):
         return text
 
 
+# ============================================================
+# API 路由 (严格匹配 app.js 契约)
+# ============================================================
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/tasks')
+def get_tasks_dict():
+    """返回 dict 形式全部任务（供 app.js 消费）"""
+    with lock:
+        return jsonify(tasks)
+
+
+@app.route('/api/tasks')
+def api_tasks():
+    with lock:
+        lst = list(tasks.values())
+    lst.sort(key=lambda x: x.get('created_at', 0), reverse=True)
+    return jsonify(lst[:MAX_TASKS])
+
+
+@app.route('/api/stats')
+def api_stats():
+    """统计数据"""
+    with lock:
+        lst = list(tasks.values())
+    total = len(lst)
+    running = sum(1 for t in lst if t.get('status') == 'running')
+    done = sum(1 for t in lst if t.get('status') == 'done')
+    error = sum(1 for t in lst if t.get('status') == 'error')
+    subs = sum(t.get('subtitle_count', 0) for t in lst)
+    rate = f"{round(done / total * 100)}%" if total else "0%"
+    return jsonify({
+        'total': total,
+        'running': running,
+        'done': done,
+        'error': error,
+        'rate': rate,
+        'subs': subs
+    })
+
+
+@app.route('/api/system')
 @app.route('/api/system-status')
-def api_system_status():
-    """获取系统运行状态"""
-    cpu = None
+def api_system():
+    """系统监控指标"""
+    cpu_pct = 0.0
     try:
         out = subprocess.check_output(['top', '-bn1'], text=True, timeout=2)
         for line in out.split('\n'):
             if '%Cpu' in line or 'CPU:' in line:
-                cpu = line.strip()
+                m = re.search(r'([\d.]+)\s*id', line)
+                if m:
+                    cpu_pct = round(100.0 - float(m.group(1)), 1)
                 break
     except Exception:
         pass
 
-    loadavg = None
+    loadavg = [0.0, 0.0, 0.0]
     try:
         with open('/proc/loadavg') as f:
-            loadavg = f.read().strip()
+            parts = f.read().strip().split()
+            loadavg = [float(parts[0]), float(parts[1]), float(parts[2])]
     except Exception:
         pass
 
-    mem = {}
+    mem_data = {'used': 0, 'total': 1, 'percent': 0.0}
     try:
         with open('/proc/meminfo') as f:
+            t_k, a_k = 0, 0
             for line in f:
-                if line.startswith('MemTotal:'):
-                    mem['total'] = int(line.split()[1])
-                elif line.startswith('MemAvailable:'):
-                    mem['available'] = int(line.split()[1])
+                if line.startswith('MemTotal:'): t_k = int(line.split()[1])
+                elif line.startswith('MemAvailable:'): a_k = int(line.split()[1])
+            if t_k:
+                used_k = t_k - a_k
+                mem_data = {
+                    'used': used_k * 1024,
+                    'total': t_k * 1024,
+                    'percent': round(used_k / t_k * 100, 1)
+                }
     except Exception:
         pass
 
-    disk = {}
+    disk_data = {'used': 0, 'total': 1, 'percent': 0.0}
     try:
-        st = os.statvfs(BASE)
-        disk['total'] = st.f_blocks * st.f_frsize
-        disk['free'] = st.f_bavail * st.f_frsize
+        st = os.statvfs(DOWNLOAD_DIR)
+        tot = st.f_blocks * st.f_frsize
+        free = st.f_bavail * st.f_frsize
+        used = tot - free
+        disk_data = {
+            'used': used,
+            'total': tot,
+            'percent': round(used / tot * 100, 1) if tot else 0.0
+        }
     except Exception:
         pass
 
@@ -525,16 +583,15 @@ def api_system_status():
             pass
     try:
         req = urllib.request.Request(url + '/api/tags')
-        with urllib.request.urlopen(req, timeout=3) as r:
+        with urllib.request.urlopen(req, timeout=2) as r:
             data = json.loads(r.read())
         models = [m.get('name', '') for m in data.get('models', [])]
         ollama['online'] = True
         ollama['model'] = models[0] if models else ''
         ollama['models'] = models
     except Exception as e:
-        ollama['error'] = str(e)[:100]
+        ollama['error'] = str(e)[:80]
 
-    # YouTube 下载器状态
     pot_online = downloader.check_pot_provider()
     ff_exists, ff_count = downloader.check_firefox_profile()
     yt_status = {
@@ -545,48 +602,44 @@ def api_system_status():
         'strategies': [s[0] for s in downloader.get_auth_strategy()]
     }
 
-    uptime = None
+    uptime = 0
     try:
         with open('/proc/uptime') as f:
             uptime = float(f.read().split()[0])
     except Exception:
         pass
 
-    return {
-        'cpu': cpu,
+    return jsonify({
+        'cpu': cpu_pct,
         'loadavg': loadavg,
-        'memory': mem,
-        'disk': disk,
+        'memory': mem_data,
+        'disk': disk_data,
         'ollama': ollama,
         'youtube': yt_status,
         'uptime': uptime,
         'ts': time.time(),
         'active': _active,
-    }
+    })
 
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+@app.route('/api/cookies')
+@app.route('/api/cookies-status')
+def api_cookies():
+    """返回 Cookie 与代理信息"""
+    def _file_info(p):
+        if not os.path.exists(p):
+            return {'path': os.path.basename(p), 'exists': False, 'size': 0, 'mtime': 0}
+        try:
+            st = os.stat(p)
+            return {'path': os.path.basename(p), 'exists': True, 'size': st.st_size, 'mtime': int(st.st_mtime)}
+        except Exception:
+            return {'path': os.path.basename(p), 'exists': False, 'size': 0, 'mtime': 0}
 
-
-def start_new_task(url):
-    if 'youtube.com/watch' not in url and 'youtu.be/' not in url:
-        return None
-    task_id = f"t{int(time.time() * 1000)}"
-    with lock:
-        tasks[task_id] = {
-            'id': task_id, 'status': 'queued', 'progress': 0,
-            'step': '排队中...', 'title': '处理中...',
-            'video_id': '', 'video_file': '', 'logs': [], 'url': url,
-            'created_at': time.time(),
-            'duration': None, 'subtitle_count': 0,
-        }
-        save_tasks()
-    _start_ollama_if_needed()
-    t = threading.Thread(target=run_task, args=(task_id, url), daemon=True)
-    t.start()
-    return task_id
+    return jsonify({
+        'youtube': _file_info(YOUTUBE_COOKIES),
+        'bilibili': _file_info(COOKIES),
+        'proxy': downloader.proxy,
+    })
 
 
 @app.route('/start', methods=['POST'])
@@ -620,17 +673,40 @@ def get_status():
     return jsonify(t or {'error': 'not found'}), (404 if not t else 200)
 
 
-@app.route('/api/tasks')
-def api_tasks():
+@app.route('/api/retry', methods=['POST'])
+def api_retry():
+    data = request.get_json() or {}
+    tid = data.get('task_id', '')
+    t = tasks.get(tid)
+    if not t or not t.get('url'):
+        return jsonify({'error': '未找到任务或 URL'}), 404
+    t['status'] = 'queued'
+    t['progress'] = 0
+    t['step'] = '已重新排队'
+    t['logs'].append(f"[{time.strftime('%H:%M:%S')}] 🔄 手动重试任务")
+    save_tasks()
+    _start_ollama_if_needed()
+    th = threading.Thread(target=run_task, args=(tid, t['url']), daemon=True)
+    th.start()
+    return jsonify({'ok': True, 'task_id': tid})
+
+
+@app.route('/api/clear', methods=['POST'])
+@app.route('/api/clear-tasks', methods=['POST'])
+def api_clear():
+    data = request.get_json() or {}
+    only_finished = data.get('only_finished', True)
     with lock:
-        lst = list(tasks.values())
-    lst.sort(key=lambda x: x.get('created_at', 0), reverse=True)
-    return jsonify(lst[:MAX_TASKS])
+        for k in list(tasks.keys()):
+            if only_finished and tasks[k].get('status') not in ('done', 'error'):
+                continue
+            del tasks[k]
+        save_tasks()
+    return jsonify({'ok': True, 'remaining': len(tasks)})
 
 
 @app.route('/api/test-youtube', methods=['POST'])
 def api_test_youtube():
-    """测试 YouTube 下载连通性 (只读取 metadata, 不下载视频)"""
     data = request.get_json() or {}
     test_url = data.get('url', 'https://www.youtube.com/watch?v=_onfQRKB1JY')
     try:
@@ -651,32 +727,7 @@ def api_test_youtube():
         }), 500
 
 
-@app.route('/api/cookies-status')
-def api_cookies_status():
-    """返回账号与 cookie 状态"""
-    def _f(name, path):
-        if not os.path.exists(path):
-            return {'name': name, 'exists': False, 'valid': False, 'msg': '未找到 cookie 文件'}
-        try:
-            sz = os.path.getsize(path)
-            if sz == 0:
-                return {'name': name, 'exists': True, 'valid': False, 'msg': '文件为空'}
-            return {'name': name, 'exists': True, 'valid': True, 'msg': f'文件有效 ({round(sz/1024, 1)} KB)'}
-        except Exception as e:
-            return {'name': name, 'exists': True, 'valid': False, 'msg': str(e)}
-
-    pot_online = downloader.check_pot_provider()
-    ff_exists, ff_count = downloader.check_firefox_profile()
-
-    return jsonify({
-        'youtube': _f('YouTube (Fallback)', YOUTUBE_COOKIES),
-        'bilibili': _f('Bilibili', COOKIES),
-        'pot_provider': {'online': pot_online, 'url': downloader.pot_provider_url},
-        'firefox_profile': {'exists': ff_exists, 'cookie_count': ff_count, 'path': downloader.browser_profile},
-        'proxy': downloader.proxy,
-    })
-
-
+@app.route('/api/yt-cookie', methods=['POST'])
 @app.route('/api/upload-yt-cookie', methods=['POST'])
 def api_upload_yt_cookie():
     if 'file' not in request.files:
@@ -707,19 +758,6 @@ def api_proxy():
             return jsonify({'error': str(e)}), 500
     else:
         return jsonify({'proxy': downloader.proxy})
-
-
-@app.route('/api/clear-tasks', methods=['POST'])
-def api_clear_tasks():
-    data = request.get_json() or {}
-    only_finished = data.get('only_finished', True)
-    with lock:
-        for k in list(tasks.keys()):
-            if only_finished and tasks[k].get('status') not in ('done', 'error'):
-                continue
-            del tasks[k]
-        save_tasks()
-    return jsonify({'ok': True, 'remaining': len(tasks)})
 
 
 def _safe_path(root, filename):
@@ -784,18 +822,23 @@ def api_delete_files():
 
 @app.route('/api/clear-all', methods=['POST'])
 def api_clear_all():
+    total_size = 0
+    for d in (DOWNLOAD_DIR, SUBTITLE_DIR, FINAL_DIR):
+        for root, dirs, files in os.walk(d):
+            for fn in files:
+                try: total_size += os.path.getsize(os.path.join(root, fn))
+                except OSError: pass
+
     removed = 0
     for d in (DOWNLOAD_DIR, SUBTITLE_DIR, FINAL_DIR):
-        if not os.path.isdir(d):
-            continue
+        if not os.path.isdir(d): continue
         for fn in os.listdir(d):
             p = _safe_path(d, fn)
             if p and os.path.isfile(p):
                 try:
                     os.remove(p)
                     removed += 1
-                except OSError:
-                    pass
+                except OSError: pass
 
     task_count = len(tasks)
     with lock:
@@ -806,6 +849,7 @@ def api_clear_all():
         'ok': True,
         'removed': removed,
         'tasks_cleared': task_count,
+        'freed_mb': round(total_size / 1048576, 1),
         'kept': ['config.yaml', 'cookies.json', 'youtube_cookies.txt'],
     })
 
@@ -856,6 +900,25 @@ def api_tg_token():
             'users': 1 if chat_id else 0,
             'token_preview': token[:10] + '...' if token else None,
         })
+
+
+def start_new_task(url):
+    if 'youtube.com/watch' not in url and 'youtu.be/' not in url:
+        return None
+    task_id = f"t{int(time.time() * 1000)}"
+    with lock:
+        tasks[task_id] = {
+            'id': task_id, 'status': 'queued', 'progress': 0,
+            'step': '排队中...', 'title': '处理中...',
+            'video_id': '', 'video_file': '', 'logs': [], 'url': url,
+            'created_at': time.time(),
+            'duration': None, 'subtitle_count': 0,
+        }
+        save_tasks()
+    _start_ollama_if_needed()
+    t = threading.Thread(target=run_task, args=(task_id, url), daemon=True)
+    t.start()
+    return task_id
 
 
 if __name__ == '__main__':

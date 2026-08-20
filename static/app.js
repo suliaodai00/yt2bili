@@ -62,6 +62,7 @@ function drawSpark(el, data, color) {
 
 /* ================= 系统监控 ================= */
 function renderSystem(d) {
+  if (!d) return;
   const cpu = d.cpu;
   if (cpu != null) {
     $('cpuNum').textContent = cpu.toFixed(1) + '%';
@@ -88,6 +89,40 @@ function renderSystem(d) {
     $('loadNum').textContent = d.loadavg.map(x => x.toFixed(2)).join(' / ');
   }
   $('uptimeTxt').textContent = '已运行 ' + fmtUptime(d.uptime) + ' · 并发 ' + (d.active ?? 0);
+
+  // YouTube 下载体系状态渲染
+  const yt = d.youtube;
+  if (yt) {
+    const potBadge = $('potBadge');
+    if (potBadge) {
+      if (yt.pot_provider === 'online') {
+        potBadge.className = 'badge badge-on';
+        potBadge.textContent = 'PO Token 🟢 正常';
+      } else {
+        potBadge.className = 'badge badge-off';
+        potBadge.textContent = 'PO Token 🔴 离线';
+      }
+    }
+    const potArchStatus = $('potArchStatus');
+    if (potArchStatus) {
+      potArchStatus.textContent = yt.pot_provider === 'online' ? '🟢 在线运行' : '🔴 离线';
+      $('potArchBadge').className = 'yt-arch-badge ' + (yt.pot_provider === 'online' ? 'badge-green' : 'badge-red');
+      $('potArchBadge').textContent = yt.pot_provider === 'online' ? '127.0.0.1:4416' : '容器离线';
+    }
+    const ffArchStatus = $('ffArchStatus');
+    if (ffArchStatus) {
+      const hasFf = yt.firefox_profile === 'exists' && yt.firefox_cookie_count > 0;
+      ffArchStatus.textContent = hasFf ? '🟢 Profile 就绪' : '⚪ 未配置';
+      $('ffArchBadge').className = 'yt-arch-badge ' + (hasFf ? 'badge-green' : 'badge-yellow');
+      $('ffArchBadge').textContent = `${yt.firefox_cookie_count || 0} 条 Cookie`;
+    }
+    const ytcArchStatus = $('ytcArchStatus');
+    if (ytcArchStatus) {
+      ytcArchStatus.textContent = yt.cookies_txt ? '🟢 文件存在' : '⚪ 未放置';
+      $('ytcArchBadge').className = 'yt-arch-badge ' + (yt.cookies_txt ? 'badge-green' : 'badge-yellow');
+      $('ytcArchBadge').textContent = yt.cookies_txt ? 'youtube_cookies.txt' : '无文件';
+    }
+  }
 }
 
 function renderOllama(o) {
@@ -172,7 +207,7 @@ function startBiliLogin() {
   $('biliStatus').textContent = '生成二维码中...';
   fetch('/api/bili-login/start', { method: 'POST' }).then(r => r.json()).then(d => {
     if (d.error) { $('biliStatus').textContent = d.error; return; }
-    if (!d.qr) { $('biliStatus').textContent = '服务器缺少二维码库，请执行: pip install qrcode pillow'; return; }
+    if (!d.qr) { $('biliStatus').textContent = '服务器缺少二维码库'; return; }
     biliKey = d.key;
     $('biliQr').src = d.qr;
     $('biliQr').style.display = 'block';
@@ -221,163 +256,96 @@ function uploadYtCookie() {
   inp.click();
 }
 
-/* ================= 统计 ================= */
+/* ================= 统计渲染 ================= */
 function renderStats(s) {
+  if (!s) return;
   $('stTotal').textContent = s.total ?? 0;
   $('stRunning').textContent = s.running ?? 0;
   $('stDone').textContent = s.done ?? 0;
   $('stError').textContent = s.error ?? 0;
-  $('stRate').textContent = (s.success_rate ?? 0) + '%';
-  $('stSubs').textContent = s.subtitle_count ?? 0;
+  $('stRate').textContent = s.rate ?? '0%';
+  $('stSubs').textContent = s.subs ?? 0;
 }
 
-function renderAssistant() {
-  const stage = $('assistantStage');
-  if (!stage) return;
-  const tasks = Object.values(allTasks);
-  const running = tasks.filter(t => ['queued', 'running'].includes(t.status));
-  const errors = tasks.filter(t => t.status === 'error');
-  const done = tasks.filter(t => t.status === 'done');
-  let pct = 0;
-  let line = '等待新的 YouTube 链接';
-  let state = 'empty';
-
-  if (tasks.length) {
-    const totalProgress = tasks.reduce((sum, t) => sum + Number(t.progress || 0), 0);
-    pct = Math.round(totalProgress / tasks.length);
-    if (running.length) {
-      const active = running.sort((a, b) => (b.created_at || 0) - (a.created_at || 0))[0];
-      const activePct = Number(active.progress || 0);
-      pct = activePct;
-      state = 'running';
-      line = (active.step || '任务处理中') + ' · ' + activePct.toFixed(1) + '%';
-    } else if (errors.length) {
-      state = 'error';
-      line = '有任务失败，点开日志查看原因';
-    } else if (done.length === tasks.length) {
-      pct = 100;
-      state = 'done';
-      line = '全部任务已完成，可以继续投喂链接';
-    } else {
-      state = 'empty';
-      line = '任务队列已同步';
-    }
-  }
-
-  stage.classList.remove('state-empty', 'state-running', 'state-done', 'state-error');
-  stage.classList.add('state-' + state);
-  $('assistantLine').textContent = line;
-  $('assistantPercent').textContent = Number(pct).toFixed(1) + '%';
-  $('assistantProgressFill').style.width = Number(pct).toFixed(1) + '%';
-}
-
-/* ================= 任务列表 ================= */
-function taskCardsHtml() {
-  let list = Object.values(allTasks).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-  if (filter === 'running') list = list.filter(t => ['queued', 'running'].includes(t.status));
-  else if (filter !== 'all') list = list.filter(t => t.status === filter);
-
-  const visible = Object.keys(openLogs).filter(id => openLogs[id]);
-  const html = list.map(t => {
-    const tid = t.id;
-    const st = t.status || 'error';
-    const dur = t.duration ? '<span class="task-meta">' + fmtDur(t.duration) + '</span>' : '';
-    const elapsed = (st === 'running' || st === 'queued')
-      ? '<span class="task-meta task-elapsed" data-tid="' + tid + '">' + (st === 'queued' ? '排队中' : '已运行 --') + '</span>'
-      : '';
-    const subs = t.subtitle_count ? '<span class="task-meta">字幕 ' + t.subtitle_count + ' 条</span>' : '';
-    const open = visible.includes(tid);
-    const logHtml = open && t.logs && t.logs.length
-      ? '<div class="task-log open" id="log' + tid + '">' + t.logs.map(l => '<div>' + esc(l) + '</div>').join('') + '</div>'
-      : '';
-    const canRetry = (st === 'error' || st === 'done') && t.url;
-    const hasFile = t.video_id || t.video_file;
-    const deletedMark = t.files_deleted ? '<span class="task-meta" style="color:var(--err)">文件已删除</span>' : '';
-    return `<div class="task-card" id="c${tid}">
-      <div class="task-head">
-        <div class="task-head-left">
-          <span class="tag tag-${st}">${statusLabel(st)}</span>
-          <div class="task-title" title="${esc(t.title)}">${esc(t.title)}</div>
-          ${dur}${elapsed}${subs}${deletedMark}
-        </div>
-        <div class="task-actions">
-          <button class="mini-btn" onclick="toggleLog('${tid}')">${open ? '收起' : '日志'}</button>
-          <button class="mini-btn" onclick="exportLog('${tid}')" title="导出任务日志为 txt">导出</button>
-          <button class="mini-btn" onclick="copyUrl('${tid}')" title="复制原链接">复制</button>
-          ${canRetry ? `<button class="mini-btn retry" onclick="retryTask('${tid}')">重试</button>` : ''}
-          ${hasFile && !t.files_deleted ? `<button class="mini-btn danger" onclick="deleteFiles('${tid}')">删文件</button>` : ''}
-        </div>
-      </div>
-      <div class="task-progress"><div class="task-fill${st === 'error' ? ' err' : ''}" style="width:${Number(t.progress || 0).toFixed(1)}%"></div></div>
-      <div class="task-foot">
-        <span class="task-step">${esc(t.step || '')}${(t.status === 'running' || t.status === 'queued') ? ' · ' + Number(t.progress || 0).toFixed(1) + '%' : ''}</span>
-        ${t.video_id ? '<span class="task-meta">' + esc(t.video_id) + '</span>' : ''}
-      </div>
-      ${logHtml}
-    </div>`;
-  }).join('');
-  $('emptyState').style.display = list.length ? 'none' : 'block';
-  return html || '<div class="empty">当前筛选下暂无任务</div>';
-}
-
+/* ================= 任务渲染 ================= */
 function renderTasks() {
-  const scrolls = {};
-  Object.keys(openLogs).forEach(id => {
-    if (openLogs[id]) {
-      const el = document.getElementById('log' + id);
-      if (el) {
-        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-        scrolls[id] = { top: el.scrollTop, atBottom };
-      }
-    }
+  const list = Object.values(allTasks).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  const filtered = list.filter(t => {
+    if (filter === 'all') return true;
+    return t.status === filter;
   });
-  $('taskList').innerHTML = taskCardsHtml();
-  Object.keys(scrolls).forEach(id => {
-    const el = document.getElementById('log' + id);
-    if (el) {
-      const s = scrolls[id];
-      if (s.atBottom) el.scrollTop = el.scrollHeight;
-      else el.scrollTop = s.top;
-    }
-  });
-  updateElapsed();
-  renderAssistant();
+
+  const empty = $('emptyState');
+  const container = $('taskList');
+
+  if (list.length === 0) {
+    empty.style.display = 'block';
+    container.innerHTML = '';
+    renderAssistant(null);
+    return;
+  }
+  empty.style.display = filtered.length === 0 ? 'block' : 'none';
+
+  const running = list.find(t => t.status === 'running') || list.find(t => t.status === 'queued') || list[0];
+  renderAssistant(running);
+
+  container.innerHTML = filtered.map(t => {
+    const isLogOpen = openLogs[t.id];
+    return `
+      <div class="task-card ${t.status}" id="task-${t.id}">
+        <div class="task-head">
+          <div class="task-title-row">
+            <span class="task-status-tag ${t.status}">${statusLabel(t.status)}</span>
+            <span class="task-title">${esc(t.title || '正在获取信息...')}</span>
+          </div>
+          <div class="task-meta">
+            <span class="task-elapsed" data-tid="${t.id}">${fmtDur(t.duration)}</span>
+            ${t.bvid ? `<a href="https://www.bilibili.com/video/${t.bvid}" target="_blank" class="bvid-link">📺 ${t.bvid}</a>` : ''}
+          </div>
+        </div>
+        <div class="task-progress-box">
+          <div class="task-step-info">
+            <span>${esc(t.step || '')}</span>
+            <strong>${t.progress || 0}%</strong>
+          </div>
+          <div class="task-bar-track">
+            <div class="task-bar-val ${t.status}" style="width:${t.progress || 0}%"></div>
+          </div>
+        </div>
+        <div class="task-foot">
+          <button class="mini-btn" onclick="toggleLog('${t.id}')">${isLogOpen ? '收起日志' : '查看日志'}</button>
+          ${t.status === 'error' ? `<button class="mini-btn" onclick="retryTask('${t.id}')">🔄 重试</button>` : ''}
+          ${t.status === 'done' || t.status === 'error' ? `<button class="mini-btn danger" onclick="deleteFiles('${t.id}')">🗑️ 清理文件</button>` : ''}
+        </div>
+        <div class="task-log" id="log-${t.id}" style="display:${isLogOpen ? 'block' : 'none'}">
+          <pre>${esc((t.logs || []).join('\n'))}</pre>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAssistant(t) {
+  const line = $('assistantLine');
+  const pct = $('assistantPercent');
+  const bar = $('assistantProgressFill');
+  if (!t) {
+    line.textContent = '等待新的 YouTube 链接';
+    pct.textContent = '0%';
+    bar.style.width = '0%';
+    return;
+  }
+  line.textContent = `[${statusLabel(t.status)}] ${t.title || '处理中'} - ${t.step || ''}`;
+  pct.textContent = `${t.progress || 0}%`;
+  bar.style.width = `${t.progress || 0}%`;
 }
 
 function toggleLog(tid) {
   openLogs[tid] = !openLogs[tid];
-  renderTasks();
-  const log = $('log' + tid);
-  if (log) log.scrollTop = log.scrollHeight;
-}
-
-function copyUrl(tid) {
-  const t = allTasks[tid];
-  if (!t || !t.url) return toast('无链接', 'err');
-  (navigator.clipboard ? navigator.clipboard.writeText(t.url) : Promise.reject())
-    .then(() => toast('已复制链接', 'ok'))
-    .catch(() => toast('复制失败', 'err'));
-}
-
-function exportLog(tid) {
-  toast('正在导出...', 'ok');
-  fetch('/api/export-log?task_id=' + encodeURIComponent(tid))
-    .then(r => {
-      if (!r.ok) return r.json().then(d => { throw new Error(d.error || ('HTTP ' + r.status)); });
-      const cd = r.headers.get('Content-Disposition') || '';
-      const m = cd.match(/filename="?([^";]+)"?/);
-      const name = m ? m[1] : 'y2b_' + tid + '.txt';
-      return r.blob().then(blob => ({ blob, name }));
-    })
-    .then(({ blob, name }) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = name;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      toast('日志已导出', 'ok');
-    })
-    .catch(e => toast('导出失败: ' + e.message, 'err'));
+  const el = $('log-' + tid);
+  if (el) el.style.display = openLogs[tid] ? 'block' : 'none';
+  const btn = el?.previousElementSibling?.querySelector('button');
+  if (btn) btn.textContent = openLogs[tid] ? '收起日志' : '查看日志';
 }
 
 /* ================= 操作 ================= */
@@ -440,8 +408,8 @@ function deleteFiles(tid) {
 }
 
 function clearAllFiles() {
-  const btn = document.getElementById('clearAllBtn');
-  const res = document.getElementById('clearResult');
+  const btn = $('clearAllBtn');
+  const res = $('clearResult');
   if (btn) { btn.disabled = true; btn.textContent = '清除中...'; }
   if (res) res.textContent = '';
   if (!confirm('确认清除全部已生成的视频、字幕、烧录成品文件？\n同时会清空所有任务记录。\n\ncookie 与代理配置将保留。此操作不可恢复！')) {
@@ -469,9 +437,9 @@ function clearAllFiles() {
 
 /* ================= Telegram 机器人 ================= */
 function saveTgToken() {
-  const input = document.getElementById('tgTokenInput');
-  const btn = document.getElementById('tgSaveBtn');
-  const status = document.getElementById('tgStatus');
+  const input = $('tgTokenInput');
+  const btn = $('tgSaveBtn');
+  const status = $('tgStatus');
   const token = input.value.trim();
   if (!token) { status.textContent = '请输入 Token'; status.style.color = 'var(--err)'; return; }
   btn.disabled = true; btn.textContent = '保存中...';
@@ -497,9 +465,9 @@ function saveTgToken() {
 }
 
 function renderTgStatus(d) {
-  const el = document.getElementById('tgBotStatus');
+  const el = $('tgBotStatus');
   if (!el) return;
-  const input = document.getElementById('tgTokenInput');
+  const input = $('tgTokenInput');
   if (d && d.token_set) {
     if (input && !input.value) input.value = d.token_preview || '';
   }
@@ -514,22 +482,21 @@ function renderTgStatus(d) {
     el.textContent = '未配置 Bot Token';
   }
 }
+
 /* ================= 轮询 ================= */
 function refreshAll() {
   Promise.all([
-    fetch('/api/stats').then(r => r.json()),
-    fetch('/api/system').then(r => r.json()),
-    fetch('/api/cookies').then(r => r.json()),
-    fetch('/api/tg-token').then(r => r.json()),
-    fetch('/tasks').then(r => r.json())
+    fetch('/api/stats').then(r => r.json()).catch(() => null),
+    fetch('/api/system').then(r => r.json()).catch(() => null),
+    fetch('/api/cookies').then(r => r.json()).catch(() => null),
+    fetch('/api/tg-token').then(r => r.json()).catch(() => null),
+    fetch('/tasks').then(r => r.json()).catch(() => null)
   ]).then(([stats, sys, cookies, tg, tasks]) => {
-    renderStats(stats);
-    renderSystem(sys);
-    renderOllama(sys.ollama);
-    renderCookies(cookies);
-    renderTgStatus(tg);
-    allTasks = tasks;
-    renderTasks();
+    if (stats) renderStats(stats);
+    if (sys) { renderSystem(sys); renderOllama(sys.ollama); }
+    if (cookies) renderCookies(cookies);
+    if (tg) renderTgStatus(tg);
+    if (tasks) { allTasks = tasks; renderTasks(); }
   }).catch(() => {});
 }
 
@@ -552,7 +519,6 @@ function updateElapsed() {
 /* ================= 事件 ================= */
 $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') submitTask(); });
 
-/* 页面切换 */
 $('pageNav').addEventListener('click', e => {
   const tab = e.target.closest('.page-tab');
   if (!tab) return;
