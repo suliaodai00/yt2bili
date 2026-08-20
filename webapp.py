@@ -438,11 +438,35 @@ def run_task(task_id, url):
         dur_msg = f" (耗时: 下载 {task.get('duration_download','-')}s / 翻译 {task.get('duration_translate','-')}s / 压制 {task.get('duration_burn','-')}s / 上传 {task.get('duration_upload','-')}s)"
         log(f"🎉 全部完成! B站: {bvid or '已提交'}{dur_msg}")
 
+        # Telegram 通知 (成功)
+        try:
+            tg_msg = (
+                f"🎉 *yt2bili 任务完成！*\n\n"
+                f"🎬 *标题*: {task.get('title', '未知')}\n"
+                f"📺 *B站*: [{bvid}](https://www.bilibili.com/video/{bvid})\n"
+                f"⏱️ *总耗时*: {round(time.time() - task['created_at'], 1)}s\n"
+                f"📊 *明细*: 下载 {task.get('duration_download','-')}s | 翻译 {task.get('duration_translate','-')}s | 压制 {task.get('duration_burn','-')}s | 上传 {task.get('duration_upload','-')}s"
+            )
+            telegram_bot.send_notification(tg_msg)
+        except Exception as te:
+            log(f"⚠️ Telegram 发送完成通知失败: {te}")
+
     except Exception as e:
         task['status'] = 'error'
         task['error'] = str(e)
         task['step'] = f"失败: {str(e)[:50]}"
         log(f"❌ 错误: {e}")
+
+        # Telegram 通知 (失败)
+        try:
+            tg_err = (
+                f"❌ *yt2bili 任务失败*\n\n"
+                f"🎬 *标题*: {task.get('title', '处理中')}\n"
+                f"⚠️ *原因*: `{str(e)[:200]}`"
+            )
+            telegram_bot.send_notification(tg_err)
+        except Exception as te:
+            log(f"⚠️ Telegram 发送失败通知异常: {te}")
 
     finally:
         with lock:
